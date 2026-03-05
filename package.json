@@ -1,0 +1,23 @@
+{
+  "name": "nexamon-launcher",
+  "version": "1.0.0",
+  "description": "Nexamon - Minecraft Launcher",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "tauri": "tauri"
+  },
+  "devDependencies": {
+    "@sveltejs/vite-plugin-svelte": "^6.2.4",
+    "@tauri-apps/cli": "^2.10.1",
+    "@tsconfig/svelte": "^5.0.8",
+    "svelte": "^5.53.7",
+    "typescript": "^5.9.3",
+    "vite": "^7.3.1"
+  },
+  "dependencies": {
+    "@tauri-apps/api": "^2.10.1",
+    "@tauri-apps/plugin-shell": "^2.3.5"
+  }
+}
