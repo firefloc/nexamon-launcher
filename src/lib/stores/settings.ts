@@ -25,6 +25,8 @@ export async function loadSettings() {
 }
 
 export async function saveSettings(s: Settings) {
-  await invoke("save_settings", { settings: s });
-  settings.set(s);
+  // Normalize empty java_path to null
+  const normalized = { ...s, java_path: s.java_path || null };
+  await invoke("save_settings", { settings: normalized });
+  settings.set(normalized);
 }

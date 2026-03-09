@@ -6,7 +6,7 @@ pub async fn authenticate_xbox_live(client: &Client, ms_token: &str) -> Result<(
         "Properties": {
             "AuthMethod": "RPS",
             "SiteName": "user.auth.xboxlive.com",
-            "RpsTicket": format!("d={ms_token}")
+            "RpsTicket": format!("t={ms_token}")
         },
         "RelyingParty": "http://auth.xboxlive.com",
         "TokenType": "JWT"
@@ -16,13 +16,23 @@ pub async fn authenticate_xbox_live(client: &Client, ms_token: &str) -> Result<(
         .post("https://user.auth.xboxlive.com/user/authenticate")
         .header("Content-Type", "application/json")
         .header("Accept", "application/json")
+        .header("x-xbl-contract-version", "1")
         .json(&body)
         .send()
         .await
         .map_err(|e| e.to_string())?;
 
-    let data: serde_json::Value = resp.json().await.map_err(|e| e.to_string())?;
-    let token = data["Token"].as_str().ok_or("No Xbox token")?.to_string();
+    let status = resp.status();
+    let text = resp.text().await.map_err(|e| e.to_string())?;
+    log::info!("Xbox Live status={status}, body_len={}, body={}", text.len(), &text[..text.len().min(500)]);
+
+    if !status.is_success() {
+        return Err(format!("Xbox Live HTTP {status}: {text}"));
+    }
+
+    let data: serde_json::Value = serde_json::from_str(&text)
+        .map_err(|e| format!("Xbox parse error: {e}\nBody: {text}"))?;
+    let token = data["Token"].as_str().ok_or_else(|| format!("No Xbox token. Response: {text}"))?.to_string();
     let uhs = data["DisplayClaims"]["xui"][0]["uhs"]
         .as_str()
         .ok_or("No user hash")?

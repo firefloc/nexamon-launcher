@@ -21,17 +21,34 @@ pub struct ProfilesData {
 
 impl Default for ProfilesData {
     fn default() -> Self {
-        let default_profile = Profile {
-            id: "nexamon".into(),
-            name: "Nexamon".into(),
-            pack_url: "https://firefloc.github.io/nexamon/pack.toml".into(),
-            icon: "high".into(),
-            description: "Pack complet Nexamon".into(),
-            last_played: None,
-        };
         Self {
             selected: "nexamon".into(),
-            profiles: vec![default_profile],
+            profiles: vec![
+                Profile {
+                    id: "nexamon-low".into(),
+                    name: "Nexamon Low".into(),
+                    pack_url: "https://firefloc.github.io/nexamon/low/pack.toml".into(),
+                    icon: "low".into(),
+                    description: "Performance maximale, mods essentiels uniquement".into(),
+                    last_played: None,
+                },
+                Profile {
+                    id: "nexamon".into(),
+                    name: "Nexamon".into(),
+                    pack_url: "https://firefloc.github.io/nexamon/base/pack.toml".into(),
+                    icon: "high".into(),
+                    description: "Pack recommande avec shaders et mods visuels".into(),
+                    last_played: None,
+                },
+                Profile {
+                    id: "nexamon-ultra".into(),
+                    name: "Nexamon Ultra".into(),
+                    pack_url: "https://firefloc.github.io/nexamon/ultra/pack.toml".into(),
+                    icon: "ultra".into(),
+                    description: "Tous les mods et shaders, pour configs puissantes".into(),
+                    last_played: None,
+                },
+            ],
         }
     }
 }
@@ -41,7 +58,12 @@ impl ProfilesData {
         let path = paths::profiles_path();
         if path.exists() {
             if let Ok(data) = fs::read_to_string(&path) {
-                if let Ok(s) = serde_json::from_str(&data) {
+                if let Ok(mut s) = serde_json::from_str::<Self>(&data) {
+                    // Migrate: old single-profile layout → 3 tiers
+                    if s.needs_migration() {
+                        s = Self::default();
+                        let _ = s.save();
+                    }
                     return s;
                 }
             }
@@ -49,6 +71,12 @@ impl ProfilesData {
         let default = Self::default();
         let _ = default.save();
         default
+    }
+
+    /// Detect old profiles.json that only has the legacy single pack URL.
+    fn needs_migration(&self) -> bool {
+        self.profiles.len() == 1
+            && self.profiles[0].pack_url.ends_with("/nexamon/pack.toml")
     }
 
     pub fn save(&self) -> Result<(), String> {

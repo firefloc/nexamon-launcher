@@ -1,11 +1,9 @@
 use reqwest::Client;
 use serde::{Deserialize, Serialize};
 
-// Azure AD app client ID — must be registered at portal.azure.com
-// TODO: Replace with your own Azure AD app client ID
-const CLIENT_ID: &str = "00000000-0000-0000-0000-000000000000";
-const TENANT: &str = "consumers";
-const SCOPE: &str = "XboxLive.signin offline_access";
+// Nintendo Switch pre-approved client ID (no Azure AD approval needed)
+const CLIENT_ID: &str = "00000000441cc96b";
+const SCOPE: &str = "service::user.auth.xboxlive.com::MBI_SSL";
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct DeviceCodeResponse {
@@ -26,17 +24,21 @@ struct TokenResponse {
 
 pub async fn start_device_code_flow(client: &Client) -> Result<DeviceCodeResponse, String> {
     let resp = client
-        .post(format!(
-            "https://login.microsoftonline.com/{TENANT}/oauth2/v2.0/devicecode"
-        ))
-        .form(&[("client_id", CLIENT_ID), ("scope", SCOPE)])
+        .post("https://login.live.com/oauth20_connect.srf")
+        .form(&[
+            ("client_id", CLIENT_ID),
+            ("scope", SCOPE),
+            ("response_type", "device_code"),
+        ])
         .send()
         .await
         .map_err(|e| e.to_string())?;
 
-    resp.json::<DeviceCodeResponse>()
-        .await
-        .map_err(|e| e.to_string())
+    let text = resp.text().await.map_err(|e| e.to_string())?;
+    log::debug!("Device code response: {text}");
+
+    serde_json::from_str::<DeviceCodeResponse>(&text)
+        .map_err(|e| format!("Failed to parse device code response: {e}\nBody: {text}"))
 }
 
 pub async fn poll_for_token(
@@ -56,9 +58,7 @@ pub async fn poll_for_token(
         tokio::time::sleep(std::time::Duration::from_secs(interval)).await;
 
         let resp = client
-            .post(format!(
-                "https://login.microsoftonline.com/{TENANT}/oauth2/v2.0/token"
-            ))
+            .post("https://login.live.com/oauth20_token.srf")
             .form(&[
                 ("grant_type", "urn:ietf:params:oauth:grant-type:device_code"),
                 ("client_id", CLIENT_ID),
@@ -68,7 +68,9 @@ pub async fn poll_for_token(
             .await
             .map_err(|e| e.to_string())?;
 
+        let status = resp.status();
         let text = resp.text().await.map_err(|e| e.to_string())?;
+        log::info!("MSA poll status={status}, body_len={}", text.len());
         let token: serde_json::Value = serde_json::from_str(&text).map_err(|e| e.to_string())?;
 
         if let Some(err) = token.get("error").and_then(|e| e.as_str()) {
@@ -91,15 +93,14 @@ pub async fn poll_for_token(
             .ok_or("No refresh_token")?
             .to_string();
 
+        log::info!("MSA token obtained, len={}, starts_with={}", access_token.len(), &access_token[..access_token.len().min(20)]);
         return Ok((access_token, refresh_token));
     }
 }
 
 pub async fn refresh_token(client: &Client, refresh: &str) -> Result<(String, String), String> {
     let resp = client
-        .post(format!(
-            "https://login.microsoftonline.com/{TENANT}/oauth2/v2.0/token"
-        ))
+        .post("https://login.live.com/oauth20_token.srf")
         .form(&[
             ("grant_type", "refresh_token"),
             ("client_id", CLIENT_ID),

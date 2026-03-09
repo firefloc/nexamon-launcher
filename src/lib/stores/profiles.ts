@@ -17,14 +17,26 @@ export interface ProfilesData {
 
 export const profiles = writable<Profile[]>([]);
 export const selectedProfileId = writable<string>("");
+/** Map of profile_id → "installed" | "not_installed" */
+export const packStatuses = writable<Record<string, string>>({});
 
 export async function loadProfiles() {
   try {
     const data = await invoke<ProfilesData>("get_profiles");
     profiles.set(data.profiles);
     selectedProfileId.set(data.selected);
+    await refreshPackStatuses();
   } catch {
     profiles.set([]);
+  }
+}
+
+export async function refreshPackStatuses() {
+  try {
+    const statuses = await invoke<Record<string, string>>("get_pack_statuses");
+    packStatuses.set(statuses);
+  } catch {
+    // ignore
   }
 }
 

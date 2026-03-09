@@ -27,12 +27,22 @@ pub fn run() {
             commands::fabric::install_fabric,
             commands::packwiz::sync_mods,
             commands::launch::launch_game,
+            commands::launch::prepare_and_sync,
+            commands::launch::resolve_configs_and_launch,
+            commands::launch::launch_after_sync,
+            commands::launch::repair_pack,
+            commands::launch::resolve_configs,
             commands::settings::get_settings,
             commands::settings::save_settings,
+            commands::settings::get_system_ram_mb,
             commands::profiles::get_profiles,
             commands::profiles::set_selected_profile,
             commands::profiles::add_profile,
             commands::profiles::remove_profile,
+            commands::profiles::get_instance_dir,
+            commands::profiles::open_instance_dir,
+            commands::profiles::get_pack_statuses,
+            commands::profiles::uninstall_pack,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

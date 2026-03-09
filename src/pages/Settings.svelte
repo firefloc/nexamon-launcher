@@ -1,11 +1,19 @@
 <script lang="ts">
+  import { invoke } from "@tauri-apps/api/core";
   import { settings, saveSettings, type Settings } from "../lib/stores/settings";
 
   let local = $state<Settings>({ ...$settings });
   let saved = $state(false);
+  let maxRamMb = $state(16384);
 
   $effect(() => {
     local = { ...$settings };
+  });
+
+  $effect(() => {
+    invoke<number>("get_system_ram_mb").then((ram) => {
+      maxRamMb = Math.floor(ram / 512) * 512;
+    });
   });
 
   async function handleSave() {
@@ -26,7 +34,7 @@
         <input
           type="range"
           min="2048"
-          max="16384"
+          max={maxRamMb}
           step="512"
           bind:value={local.ram_mb}
         />

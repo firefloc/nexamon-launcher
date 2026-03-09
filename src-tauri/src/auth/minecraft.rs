@@ -25,11 +25,13 @@ pub async fn login_with_xbox(
         .await
         .map_err(|e| e.to_string())?;
 
-    let data: serde_json::Value = resp.json().await.map_err(|e| e.to_string())?;
+    let text = resp.text().await.map_err(|e| e.to_string())?;
+    log::debug!("MC login response: {text}");
+    let data: serde_json::Value = serde_json::from_str(&text).map_err(|e| e.to_string())?;
     data["access_token"]
         .as_str()
         .map(|s| s.to_string())
-        .ok_or_else(|| "No MC access token".into())
+        .ok_or_else(|| format!("No MC access token. Response: {text}"))
 }
 
 pub async fn get_profile(client: &Client, mc_token: &str) -> Result<MinecraftProfile, String> {
