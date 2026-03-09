@@ -11,11 +11,12 @@
   import Main from "./pages/Main.svelte";
   import Settings from "./pages/Settings.svelte";
   import Console from "./pages/Console.svelte";
+  import Maintenance from "./pages/Maintenance.svelte";
   import Dev from "./pages/Dev.svelte";
   import Sidebar from "./components/Sidebar.svelte";
   import UpdateBanner from "./components/UpdateBanner.svelte";
 
-  let page = $state<"main" | "settings" | "console" | "dev">("main");
+  let page = $state<"main" | "settings" | "maintenance" | "console" | "dev">("main");
   let loggedIn = $derived($account !== null);
 
   onMount(async () => {
@@ -53,6 +54,8 @@
           <Main />
         {:else if page === "settings"}
           <Settings />
+        {:else if page === "maintenance"}
+          <Maintenance />
         {:else if page === "console"}
           <Console />
         {:else if page === "dev"}

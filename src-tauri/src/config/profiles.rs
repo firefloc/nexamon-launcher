@@ -11,6 +11,8 @@ pub struct Profile {
     pub icon: String,
     pub description: String,
     pub last_played: Option<String>,
+    #[serde(default)]
+    pub recommended_ram_mb: u32,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -31,6 +33,7 @@ impl Default for ProfilesData {
                     icon: "low".into(),
                     description: "Performance maximale, mods essentiels uniquement".into(),
                     last_played: None,
+                    recommended_ram_mb: 4096,
                 },
                 Profile {
                     id: "nexamon".into(),
@@ -39,6 +42,7 @@ impl Default for ProfilesData {
                     icon: "high".into(),
                     description: "Pack recommande avec shaders et mods visuels".into(),
                     last_played: None,
+                    recommended_ram_mb: 6144,
                 },
                 Profile {
                     id: "nexamon-ultra".into(),
@@ -47,6 +51,7 @@ impl Default for ProfilesData {
                     icon: "ultra".into(),
                     description: "Tous les mods et shaders, pour configs puissantes".into(),
                     last_played: None,
+                    recommended_ram_mb: 8192,
                 },
             ],
         }

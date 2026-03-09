@@ -2,14 +2,18 @@
   import type { Profile } from "../lib/stores/profiles";
   import { t } from "../lib/i18n";
 
-  let { profile, selected = false, installed = false, onselect, oninstall, onuninstall }: {
+  let { profile, selected = false, installed = false, systemRamMb = 16384, onselect, oninstall, onuninstall }: {
     profile: Profile;
     selected: boolean;
     installed: boolean;
+    systemRamMb?: number;
     onselect: () => void;
     oninstall: () => void;
     onuninstall: () => void;
   } = $props();
+
+  let ramInsufficient = $derived(profile.recommended_ram_mb > 0 && systemRamMb < profile.recommended_ram_mb);
+  let ramLabel = $derived(profile.recommended_ram_mb > 0 ? `${(profile.recommended_ram_mb / 1024).toFixed(0)} GB` : "");
 </script>
 
 <!-- svelte-ignore a11y_no_static_element_interactions -->
@@ -36,6 +40,11 @@
   <div class="card-body">
     <div class="card-top">
       <span class="card-name">{profile.name}</span>
+      {#if ramLabel}
+        <span class="ram-hint" class:insufficient={ramInsufficient} title={ramInsufficient ? $t("profile.ram_insufficient") : $t("profile.ram_recommended")}>
+          {ramLabel}
+        </span>
+      {/if}
       {#if installed}
         <span class="status">{$t("profile.installed")}</span>
       {/if}
@@ -118,6 +127,16 @@
     letter-spacing: 0.5px;
     color: var(--success);
     flex-shrink: 0;
+  }
+  .ram-hint {
+    font-size: 10px;
+    font-weight: 500;
+    color: var(--text-muted);
+    flex-shrink: 0;
+  }
+  .ram-hint.insufficient {
+    color: var(--danger);
+    font-weight: 700;
   }
   .action-btn {
     display: flex;

@@ -9,6 +9,9 @@
   import { t } from "../lib/i18n";
   import { debugOutlines } from "../lib/stores/dev";
 
+  let systemRamMb = $state(16384);
+  invoke<number>("get_system_ram_mb").then((ram) => { systemRamMb = ram; });
+
   let isPlaying = $derived($launcherState !== "idle");
   let selectedInstalled = $derived($packStatuses[$selectedProfileId] === "installed");
 
@@ -180,6 +183,7 @@
         {profile}
         selected={profile.id === $selectedProfileId}
         installed={$packStatuses[profile.id] === "installed"}
+        {systemRamMb}
         onselect={() => { if (!isPlaying) selectProfile(profile.id); }}
         oninstall={() => handleInstall(profile.id)}
         onuninstall={() => { showConfirmUninstall = profile.id; }}

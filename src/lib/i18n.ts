@@ -82,6 +82,13 @@ const translations: Record<Locale, Record<string, string>> = {
     "profile.installed": "Installe",
     "profile.install": "Installer",
     "profile.uninstall": "Desinstaller",
+    "profile.ram_recommended": "RAM recommandee",
+    "profile.ram_insufficient": "RAM insuffisante pour ce pack",
+
+    // Maintenance
+    "nav.maintenance": "Maintenance",
+    "maintenance.configs": "Configuration",
+    "maintenance.tools": "Outils",
 
     // Settings
     "settings.title": "Parametres",
@@ -179,6 +186,12 @@ const translations: Record<Locale, Record<string, string>> = {
     "profile.installed": "Installed",
     "profile.install": "Install",
     "profile.uninstall": "Uninstall",
+    "profile.ram_recommended": "Recommended RAM",
+    "profile.ram_insufficient": "Insufficient RAM for this pack",
+
+    "nav.maintenance": "Maintenance",
+    "maintenance.configs": "Configuration",
+    "maintenance.tools": "Tools",
 
     "settings.title": "Settings",
     "settings.performance": "Performance",

@@ -8,6 +8,7 @@ export interface Profile {
   icon: string;
   description: string;
   last_played: string | null;
+  recommended_ram_mb: number;
 }
 
 export interface ProfilesData {
