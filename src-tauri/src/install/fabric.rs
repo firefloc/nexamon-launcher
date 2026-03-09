@@ -1,5 +1,6 @@
 use reqwest::Client;
 use std::path::PathBuf;
+use std::sync::Mutex;
 use tauri::AppHandle;
 
 use crate::config::paths;
@@ -8,14 +9,35 @@ use crate::util::progress::emit_progress;
 const MC_VERSION: &str = "1.21.1";
 const LOADER_VERSION: &str = "0.18.4";
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct FabricMeta {
     pub main_class: String,
     pub libraries: Vec<PathBuf>,
 }
 
+/// Cached FabricMeta from the last successful install.
+static CACHED_META: Mutex<Option<FabricMeta>> = Mutex::new(None);
+
+/// Clear the cached FabricMeta (call at the start of a new sync).
+pub fn clear_cache() {
+    if let Ok(mut guard) = CACHED_META.lock() {
+        *guard = None;
+    }
+}
+
+/// Get cached FabricMeta if available.
+pub fn cached_meta() -> Option<FabricMeta> {
+    CACHED_META.lock().ok().and_then(|g| g.clone())
+}
+
 pub async fn install_fabric(client: &Client, app: &AppHandle) -> Result<FabricMeta, String> {
-    emit_progress(app, "Installing Fabric...", "Fetching metadata", 0.0);
+    // Return cached result if available (avoids redundant HTTP fetch)
+    if let Some(meta) = cached_meta() {
+        log::info!("[fabric] Using cached FabricMeta");
+        return Ok(meta);
+    }
+
+    emit_progress(app, "Installing Fabric...", "Fetching metadata", 0.15);
 
     let url = format!(
         "https://meta.fabricmc.net/v2/versions/loader/{MC_VERSION}/{LOADER_VERSION}"
@@ -78,12 +100,19 @@ pub async fn install_fabric(client: &Client, app: &AppHandle) -> Result<FabricMe
     }
     all_libs.push(inter_dest);
 
-    emit_progress(app, "Fabric installed", "", 1.0);
-
-    Ok(FabricMeta {
+    let result = FabricMeta {
         main_class,
         libraries: all_libs,
-    })
+    };
+
+    // Cache for reuse in do_launch
+    if let Ok(mut guard) = CACHED_META.lock() {
+        *guard = Some(result.clone());
+    }
+
+    emit_progress(app, "Fabric installed", "", 0.20);
+
+    Ok(result)
 }
 
 fn maven_to_path(name: &str) -> String {

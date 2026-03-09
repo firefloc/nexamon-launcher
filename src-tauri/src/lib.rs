@@ -32,6 +32,7 @@ pub fn run() {
             commands::launch::launch_after_sync,
             commands::launch::repair_pack,
             commands::launch::resolve_configs,
+            commands::launch::cancel_operation,
             commands::settings::get_settings,
             commands::settings::save_settings,
             commands::settings::get_system_ram_mb,

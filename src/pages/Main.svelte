@@ -41,9 +41,8 @@
         criticalConfigs = result.critical ?? [];
         criticalMessage = result.critical_message ?? "";
         optionalConflicts = result.optional ?? [];
-        if (optionalConflicts.length > 0 || criticalConfigs.length > 0) {
+        if (criticalConfigs.length > 0 || optionalConflicts.length > 0) {
           showConfigDialog = true;
-          // After config dialog, don't launch — just accept configs
           installOnly = true;
         } else {
           launcherState.set("idle");
@@ -93,7 +92,7 @@
         criticalMessage = result.critical_message ?? "";
         optionalConflicts = result.optional ?? [];
 
-        if (optionalConflicts.length > 0 || criticalConfigs.length > 0) {
+        if (criticalConfigs.length > 0 || optionalConflicts.length > 0) {
           showConfigDialog = true;
         } else {
           await invoke("launch_after_sync");
@@ -221,12 +220,19 @@
 
   <div class="play-section">
     {#if $launcherState !== "idle" && $launcherState !== "running" && !showConfigDialog}
-      <div class="progress-area">
-        <ProgressBar
-          label={$progressInfo.label}
-          detail={$progressInfo.detail}
-          progress={$progressInfo.progress}
-        />
+      <div class="progress-row">
+        <div class="progress-area">
+          <ProgressBar
+            label={$progressInfo.label}
+            detail={$progressInfo.detail}
+            progress={$progressInfo.progress}
+          />
+        </div>
+        <button class="cancel-btn" onclick={() => { invoke("cancel_operation"); launcherState.set("idle"); }} title="Cancel">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+            <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
+          </svg>
+        </button>
       </div>
     {/if}
 
@@ -409,9 +415,33 @@
     align-items: center;
     gap: 16px;
   }
-  .progress-area {
+  .progress-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
     width: 100%;
-    max-width: 400px;
+    max-width: 440px;
+  }
+  .progress-area {
+    flex: 1;
+    min-width: 0;
+  }
+  .cancel-btn {
+    background: var(--bg-tertiary);
+    color: var(--text-muted);
+    border: none;
+    padding: 8px;
+    border-radius: var(--radius);
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: all var(--transition);
+    flex-shrink: 0;
+  }
+  .cancel-btn:hover {
+    background: var(--error, #e05050);
+    color: white;
   }
   .play-btn {
     background: var(--success);

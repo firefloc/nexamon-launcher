@@ -129,7 +129,7 @@ pub async fn sync_mods(
     // Download packwiz-installer if not present
     if !packwiz_jar.exists() {
         info!("[packwiz] Downloading packwiz-installer from {PACKWIZ_BOOTSTRAP_URL}");
-        emit_progress(app, "Downloading packwiz-installer...", "", 0.0);
+        emit_progress(app, "Downloading packwiz-installer...", "", 0.20);
         emit_log(app, "[packwiz] Downloading packwiz-installer-bootstrap.jar...");
         super::super::download::client::download_file(
             client,
@@ -167,7 +167,7 @@ pub async fn sync_mods(
         msg
     })?;
 
-    emit_progress(app, "Syncing mods...", "Running packwiz-installer", 0.5);
+    emit_progress(app, "Syncing mods...", "Starting packwiz-installer", 0.22);
 
     // Build command
     let cmd_args = vec![
@@ -207,16 +207,11 @@ pub async fn sync_mods(
             msg
         })?;
 
-    info!(
-        "[packwiz] Process spawned, PID: {:?}",
-        child.id().unwrap_or(0)
-    );
-    emit_log(
-        app,
-        &format!("[packwiz] Process PID: {:?}", child.id().unwrap_or(0)),
-    );
+    let pid = child.id().unwrap_or(0);
+    info!("[packwiz] Process spawned, PID: {pid}");
+    emit_log(app, &format!("[packwiz] Process PID: {pid}"));
 
-    // Stream stdout
+    // Stream stdout — parse progress lines like "(N/TOTAL) Downloaded FILENAME"
     if let Some(stdout) = child.stdout.take() {
         let app_clone = app.clone();
         let reader = BufReader::new(stdout);
@@ -224,6 +219,31 @@ pub async fn sync_mods(
         tokio::spawn(async move {
             while let Ok(Some(line)) = lines.next_line().await {
                 info!("[packwiz/stdout] {line}");
+                // Parse "(N/TOTAL) Downloaded FILENAME"
+                if line.starts_with('(') {
+                    if let Some((progress_part, rest)) = line.split_once(") ") {
+                        let progress_part = &progress_part[1..]; // strip leading '('
+                        if let Some((current, total)) = progress_part.split_once('/') {
+                            if let (Ok(cur), Ok(tot)) = (current.parse::<f64>(), total.parse::<f64>()) {
+                                // Map packwiz progress (0-1) into global range (0.20 - 0.95)
+                                let local_pct = if tot > 0.0 { cur / tot } else { 0.0 };
+                                let global_pct = 0.20 + local_pct * 0.75;
+                                // Extract filename from "Downloaded FILENAME"
+                                let detail = if let Some(name) = rest.strip_prefix("Downloaded ") {
+                                    name.to_string()
+                                } else {
+                                    rest.to_string()
+                                };
+                                emit_progress(
+                                    &app_clone,
+                                    &format!("Syncing mods ({current}/{total})"),
+                                    &detail,
+                                    global_pct,
+                                );
+                            }
+                        }
+                    }
+                }
                 emit_log(&app_clone, &format!("[packwiz/out] {line}"));
             }
             debug!("[packwiz] stdout stream ended");
@@ -244,16 +264,26 @@ pub async fn sync_mods(
         });
     }
 
-    // Wait for process with timeout (5 minutes)
+    // Wait for process with timeout + cancellation support
     info!("[packwiz] Waiting for process to finish (timeout: 300s)...");
-    let timeout_duration = std::time::Duration::from_secs(300);
-    let status = match tokio::time::timeout(timeout_duration, child.wait()).await {
-        Ok(result) => result.map_err(|e| {
-            let msg = format!("Error waiting for packwiz-installer: {e}");
-            error!("[packwiz] {msg}");
-            msg
-        })?,
-        Err(_) => {
+    let timeout = std::time::Duration::from_secs(300);
+    let kill_rx = crate::util::cancel::kill_channel();
+
+    let status = tokio::select! {
+        result = child.wait() => {
+            result.map_err(|e| {
+                let msg = format!("Error waiting for packwiz-installer: {e}");
+                error!("[packwiz] {msg}");
+                msg
+            })?
+        }
+        _ = kill_rx => {
+            info!("[packwiz] Cancel signal received — killing process");
+            emit_log(app, "[packwiz] Cancelled — killing process");
+            let _ = child.kill().await;
+            return Err("Operation cancelled".into());
+        }
+        _ = tokio::time::sleep(timeout) => {
             error!("[packwiz] TIMEOUT after 300s — killing process");
             emit_log(app, "[packwiz] TIMEOUT after 300s — killing process");
             let _ = child.kill().await;
@@ -287,6 +317,6 @@ pub async fn sync_mods(
     }
 
     info!("[packwiz] === sync_mods END ===");
-    emit_progress(app, "Mods synced", "", 1.0);
+    emit_progress(app, "Mods synced", "", 0.95);
     Ok(())
 }

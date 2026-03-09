@@ -23,9 +23,18 @@ pub enum SyncResult {
     },
 }
 
+/// Cancel any in-progress operation (prepare_and_sync, repair, etc.)
+#[tauri::command]
+pub fn cancel_operation() {
+    crate::util::cancel::request_cancel();
+}
+
 /// Steps 1-4: prepare + sync. Returns whether configs need user decision.
 #[tauri::command]
 pub async fn prepare_and_sync(app: AppHandle) -> Result<SyncResult, String> {
+    crate::util::cancel::reset();
+    crate::install::fabric::clear_cache();
+
     let settings = Settings::load();
     let profiles = ProfilesData::load();
     let profile = profiles.selected_profile().ok_or("No profile selected")?;
@@ -36,27 +45,41 @@ pub async fn prepare_and_sync(app: AppHandle) -> Result<SyncResult, String> {
 
     let client = http_client();
 
-    // 1. Java
+    // Global progress: Java=0-5%, Minecraft=5-15%, Fabric=15-20%, Sync=20-95%, Done=95-100%
+
+    // 1. Java (0-5%)
     emit_state(&app, "checking_java");
+    emit_progress(&app, "Checking Java...", "", 0.0);
+    crate::util::cancel::check_cancelled()?;
     let java_path = if let Some(ref p) = settings.java_path {
         PathBuf::from(p)
     } else if let Some(p) = java::find_java() {
         p
     } else {
         emit_state(&app, "downloading_java");
+        emit_progress(&app, "Downloading Java...", "", 0.02);
         java::download_java(&client, &app).await?
     };
+    emit_progress(&app, "Java ready", "", 0.05);
 
-    // 2. Minecraft
+    // 2. Minecraft (5-15%)
+    crate::util::cancel::check_cancelled()?;
     emit_state(&app, "downloading_minecraft");
+    emit_progress(&app, "Downloading Minecraft...", "", 0.05);
     crate::commands::minecraft::install_minecraft(app.clone()).await?;
+    emit_progress(&app, "Minecraft ready", "", 0.15);
 
-    // 3. Fabric
+    // 3. Fabric (15-20%)
+    crate::util::cancel::check_cancelled()?;
     emit_state(&app, "installing_fabric");
+    emit_progress(&app, "Installing Fabric...", "", 0.15);
     let _fabric_meta = fabric::install_fabric(&client, &app).await?;
+    emit_progress(&app, "Fabric ready", "", 0.20);
 
-    // 4. Pre-sync config backup
+    // 4. Pre-sync config backup + packwiz sync (20-95%)
+    crate::util::cancel::check_cancelled()?;
     emit_state(&app, "syncing_mods");
+    emit_progress(&app, "Syncing mods...", "", 0.20);
     let instance_dir = paths::instance_dir(&profile.id);
 
     let user_modified = config_guard::pre_sync(&instance_dir)

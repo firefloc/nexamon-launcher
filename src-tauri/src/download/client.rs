@@ -8,6 +8,8 @@ use crate::util::progress::emit_progress;
 pub fn http_client() -> Client {
     Client::builder()
         .user_agent("NexamonLauncher/1.0")
+        .connect_timeout(std::time::Duration::from_secs(15))
+        .timeout(std::time::Duration::from_secs(60))
         .build()
         .expect("Failed to create HTTP client")
 }
