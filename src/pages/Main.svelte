@@ -4,15 +4,31 @@
   import { launcherState, progressInfo } from "../lib/stores/launcher";
   import ProfileCard from "../components/ProfileCard.svelte";
   import ProgressBar from "../components/ProgressBar.svelte";
+  import Dialog from "../components/Dialog.svelte";
 
   let isPlaying = $derived($launcherState !== "idle");
   let selectedInstalled = $derived($packStatuses[$selectedProfileId] === "installed");
 
-  // Config conflict dialog state
+  // Config conflict dialog
   let showConfigDialog = $state(false);
   let criticalConfigs = $state<string[]>([]);
   let criticalMessage = $state("");
   let optionalConflicts = $state<string[]>([]);
+  let installOnly = $state(false);
+
+  // Confirm uninstall dialog
+  let showConfirmUninstall = $state("");
+
+  // Repair dialog
+  let isRepairing = $state(false);
+  let showRepairResult = $state(false);
+  let repairResult = $state<{
+    removed_mods: string[];
+    removed_datapacks: string[];
+    restored_configs: string[];
+    resynced: boolean;
+  } | null>(null);
+  let repairError = $state("");
 
   const stateLabels: Record<string, string> = {
     idle: "Play",
@@ -25,29 +41,40 @@
     running: "Running",
   };
 
+  type SyncResult = {
+    status: string;
+    critical?: string[];
+    critical_message?: string;
+    optional?: string[];
+  };
+
+  function handleSyncResult(result: SyncResult, isInstallOnly: boolean): boolean {
+    if (result.status === "ConfigConflict") {
+      criticalConfigs = result.critical ?? [];
+      criticalMessage = result.critical_message ?? "";
+      optionalConflicts = result.optional ?? [];
+      if (criticalConfigs.length > 0 || optionalConflicts.length > 0) {
+        showConfigDialog = true;
+        installOnly = isInstallOnly;
+        return true;
+      }
+    }
+    return false;
+  }
+
+  function resetConfigDialog() {
+    showConfigDialog = false;
+    criticalConfigs = [];
+    criticalMessage = "";
+    optionalConflicts = [];
+  }
+
   async function handleInstall(profileId: string) {
     if (isPlaying) return;
-    // Select the profile first, then run install (= prepare_and_sync without launch)
     await selectProfile(profileId);
     try {
-      const result = await invoke<{
-        status: string;
-        critical?: string[];
-        critical_message?: string;
-        optional?: string[];
-      }>("prepare_and_sync");
-
-      if (result.status === "ConfigConflict") {
-        criticalConfigs = result.critical ?? [];
-        criticalMessage = result.critical_message ?? "";
-        optionalConflicts = result.optional ?? [];
-        if (criticalConfigs.length > 0 || optionalConflicts.length > 0) {
-          showConfigDialog = true;
-          installOnly = true;
-        } else {
-          launcherState.set("idle");
-        }
-      } else {
+      const result = await invoke<SyncResult>("prepare_and_sync");
+      if (!handleSyncResult(result, true)) {
         launcherState.set("idle");
       }
       await refreshPackStatuses();
@@ -57,47 +84,11 @@
     }
   }
 
-  let installOnly = $state(false);
-
-  async function handleUninstall(profileId: string) {
-    if (isPlaying) return;
-    showConfirmUninstall = profileId;
-  }
-
-  let showConfirmUninstall = $state("");
-
-  async function confirmUninstall() {
-    const id = showConfirmUninstall;
-    showConfirmUninstall = "";
-    try {
-      await invoke("uninstall_pack", { profileId: id });
-      await refreshPackStatuses();
-    } catch (e: any) {
-      console.error("Uninstall failed:", e);
-    }
-  }
-
   async function handlePlay() {
     if (isPlaying || !selectedInstalled) return;
     try {
-      const result = await invoke<{
-        status: string;
-        critical?: string[];
-        critical_message?: string;
-        optional?: string[];
-      }>("prepare_and_sync");
-
-      if (result.status === "ConfigConflict") {
-        criticalConfigs = result.critical ?? [];
-        criticalMessage = result.critical_message ?? "";
-        optionalConflicts = result.optional ?? [];
-
-        if (criticalConfigs.length > 0 || optionalConflicts.length > 0) {
-          showConfigDialog = true;
-        } else {
-          await invoke("launch_after_sync");
-        }
-      } else {
+      const result = await invoke<SyncResult>("prepare_and_sync");
+      if (!handleSyncResult(result, false)) {
         await invoke("launch_after_sync");
       }
     } catch (e: any) {
@@ -107,16 +98,10 @@
   }
 
   async function handleConfigChoice(keepUserConfigs: boolean) {
-    showConfigDialog = false;
-    criticalConfigs = [];
-    criticalMessage = "";
-    optionalConflicts = [];
+    resetConfigDialog();
     if (installOnly) {
-      // Install-only mode: accept configs but don't launch
       installOnly = false;
-      try {
-        await invoke("resolve_configs", { keepUserConfigs });
-      } catch (e: any) { console.error("resolve_configs:", e); }
+      try { await invoke("resolve_configs", { keepUserConfigs }); } catch (e: any) { console.error(e); }
       launcherState.set("idle");
       await refreshPackStatuses();
       return;
@@ -129,57 +114,23 @@
     }
   }
 
-  /** Only critical configs, no optional — just acknowledge and launch. */
-  async function handleCriticalAck() {
-    showConfigDialog = false;
-    criticalConfigs = [];
-    criticalMessage = "";
-    optionalConflicts = [];
-    if (installOnly) {
-      installOnly = false;
-      try {
-        await invoke("resolve_configs", { keepUserConfigs: false });
-      } catch (e: any) { console.error("resolve_configs:", e); }
-      launcherState.set("idle");
-      await refreshPackStatuses();
-      return;
-    }
+  async function confirmUninstall() {
+    const id = showConfirmUninstall;
+    showConfirmUninstall = "";
     try {
-      await invoke("resolve_configs_and_launch", { keepUserConfigs: false });
+      await invoke("uninstall_pack", { profileId: id });
+      await refreshPackStatuses();
     } catch (e: any) {
-      console.error("Launch failed after critical ack:", e);
-      launcherState.set("idle");
+      console.error("Uninstall failed:", e);
     }
   }
-
-  async function handleSelectProfile(id: string) {
-    if (isPlaying) return;
-    await selectProfile(id);
-  }
-
-  // Repair state
-  let isRepairing = $state(false);
-  let showRepairResult = $state(false);
-  let repairResult = $state<{
-    removed_mods: string[];
-    removed_datapacks: string[];
-    restored_configs: string[];
-    resynced: boolean;
-  } | null>(null);
-  let repairError = $state("");
 
   async function handleRepair() {
     if (isPlaying || isRepairing) return;
     isRepairing = true;
     repairError = "";
     try {
-      const result = await invoke<{
-        removed_mods: string[];
-        removed_datapacks: string[];
-        restored_configs: string[];
-        resynced: boolean;
-      }>("repair_pack");
-      repairResult = result;
+      repairResult = await invoke("repair_pack");
       showRepairResult = true;
     } catch (e: any) {
       repairError = String(e);
@@ -191,11 +142,12 @@
   }
 
   async function openInstanceFolder() {
-    try {
-      await invoke("open_instance_dir");
-    } catch (e: any) {
-      console.error("Failed to open folder:", e);
-    }
+    try { await invoke("open_instance_dir"); } catch (e: any) { console.error(e); }
+  }
+
+  function handleCancel() {
+    invoke("cancel_operation");
+    launcherState.set("idle");
   }
 </script>
 
@@ -208,9 +160,9 @@
         {profile}
         selected={profile.id === $selectedProfileId}
         installed={$packStatuses[profile.id] === "installed"}
-        onselect={() => handleSelectProfile(profile.id)}
+        onselect={() => { if (!isPlaying) selectProfile(profile.id); }}
         oninstall={() => handleInstall(profile.id)}
-        onuninstall={() => handleUninstall(profile.id)}
+        onuninstall={() => { showConfirmUninstall = profile.id; }}
       />
     {/each}
     {#if $profiles.length === 0}
@@ -228,7 +180,7 @@
             progress={$progressInfo.progress}
           />
         </div>
-        <button class="cancel-btn" onclick={() => { invoke("cancel_operation"); launcherState.set("idle"); }} title="Cancel">
+        <button class="cancel-btn" onclick={handleCancel} title="Cancel">
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
             <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
           </svg>
@@ -249,17 +201,12 @@
           {stateLabels[$launcherState] || "Play"}
         {/if}
       </button>
-      <button
-        class="folder-btn"
-        class:disabled={isRepairing}
-        onclick={handleRepair}
-        title="Verify & repair pack"
-      >
+      <button class="tool-btn" class:disabled={isRepairing} onclick={handleRepair} title="Verify & repair">
         <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
           <path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"/>
         </svg>
       </button>
-      <button class="folder-btn" onclick={openInstanceFolder} title="Open instance folder">
+      <button class="tool-btn" onclick={openInstanceFolder} title="Open folder">
         <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
           <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/>
         </svg>
@@ -268,117 +215,100 @@
   </div>
 </div>
 
+<!-- Config conflict dialog -->
 {#if showConfigDialog}
-  <div class="dialog-overlay" role="dialog" aria-modal="true">
-    <div class="dialog">
-      <h3>Configuration update</h3>
-
+  <Dialog title="Configuration update">
+    {#snippet children()}
       {#if criticalConfigs.length > 0}
         <div class="critical-section">
-          <p class="critical-label">Required updates applied</p>
-          <p class="critical-msg">{criticalMessage || "Some configs were force-updated for compatibility."}</p>
-          <div class="conflict-list critical">
+          <p class="label-warning">Required updates applied</p>
+          <p class="text-muted">{criticalMessage || "Some configs were force-updated for compatibility."}</p>
+          <div class="file-list warning">
             {#each criticalConfigs.slice(0, 5) as file}
-              <div class="conflict-file">{file}</div>
+              <div class="file-entry">{file}</div>
             {/each}
             {#if criticalConfigs.length > 5}
-              <div class="conflict-more">+{criticalConfigs.length - 5} more...</div>
+              <div class="file-more">+{criticalConfigs.length - 5} more...</div>
             {/if}
           </div>
         </div>
       {/if}
-
       {#if optionalConflicts.length > 0}
-        <p>
+        <p class="text-secondary">
           {optionalConflicts.length} config file{optionalConflicts.length > 1 ? 's' : ''} you
           customized {optionalConflicts.length > 1 ? 'have' : 'has'} also been updated.
         </p>
-        <div class="conflict-list">
+        <div class="file-list">
           {#each optionalConflicts.slice(0, 8) as file}
-            <div class="conflict-file">{file}</div>
+            <div class="file-entry">{file}</div>
           {/each}
           {#if optionalConflicts.length > 8}
-            <div class="conflict-more">+{optionalConflicts.length - 8} more...</div>
+            <div class="file-more">+{optionalConflicts.length - 8} more...</div>
           {/if}
         </div>
-        <div class="dialog-buttons">
-          <button class="btn-secondary" onclick={() => handleConfigChoice(true)}>
-            Keep my settings
-          </button>
-          <button class="btn-primary" onclick={() => handleConfigChoice(false)}>
-            Use pack defaults
-          </button>
-        </div>
-      {:else}
-        <div class="dialog-buttons">
-          <button class="btn-primary" onclick={handleCriticalAck}>
-            OK
-          </button>
-        </div>
       {/if}
-    </div>
-  </div>
+    {/snippet}
+    {#snippet actions()}
+      {#if optionalConflicts.length > 0}
+        <button class="btn btn-secondary" onclick={() => handleConfigChoice(true)}>Keep my settings</button>
+        <button class="btn btn-primary" onclick={() => handleConfigChoice(false)}>Use pack defaults</button>
+      {:else}
+        <button class="btn btn-primary" onclick={() => handleConfigChoice(false)}>OK</button>
+      {/if}
+    {/snippet}
+  </Dialog>
 {/if}
 
+<!-- Uninstall confirmation -->
 {#if showConfirmUninstall}
-  <div class="dialog-overlay" role="dialog" aria-modal="true">
-    <div class="dialog">
-      <h3>Uninstall pack</h3>
-      <p>This will delete all downloaded files for this profile. You can reinstall it later.</p>
-      <div class="dialog-buttons">
-        <button class="btn-secondary" onclick={() => { showConfirmUninstall = ""; }}>Cancel</button>
-        <button class="btn-danger" onclick={confirmUninstall}>Uninstall</button>
-      </div>
-    </div>
-  </div>
+  <Dialog title="Uninstall pack">
+    {#snippet children()}
+      <p class="text-secondary">This will delete all downloaded files for this profile. You can reinstall it later.</p>
+    {/snippet}
+    {#snippet actions()}
+      <button class="btn btn-secondary" onclick={() => { showConfirmUninstall = ""; }}>Cancel</button>
+      <button class="btn btn-danger" onclick={confirmUninstall}>Uninstall</button>
+    {/snippet}
+  </Dialog>
 {/if}
 
+<!-- Repair result -->
 {#if showRepairResult}
-  <div class="dialog-overlay" role="dialog" aria-modal="true">
-    <div class="dialog">
+  {@const hasChanges = repairResult && (repairResult.removed_mods.length > 0 || repairResult.removed_datapacks.length > 0 || repairResult.restored_configs.length > 0)}
+  <Dialog title={repairError ? "Repair failed" : hasChanges ? "Pack repaired" : "Pack is clean"}>
+    {#snippet children()}
       {#if repairError}
-        <h3>Repair failed</h3>
-        <p class="repair-error">{repairError}</p>
-      {:else if repairResult && (repairResult.removed_mods.length > 0 || repairResult.removed_datapacks.length > 0 || repairResult.restored_configs.length > 0)}
-        <h3>Pack repaired</h3>
+        <p class="text-error mono">{repairError}</p>
+      {:else if hasChanges && repairResult}
         {#if repairResult.removed_mods.length > 0}
-          <p class="repair-category">Removed {repairResult.removed_mods.length} unauthorized mod{repairResult.removed_mods.length > 1 ? 's' : ''}</p>
-          <div class="conflict-list">
-            {#each repairResult.removed_mods as name}
-              <div class="conflict-file">{name}</div>
-            {/each}
+          <p class="label-muted">Removed {repairResult.removed_mods.length} unauthorized mod{repairResult.removed_mods.length > 1 ? 's' : ''}</p>
+          <div class="file-list">
+            {#each repairResult.removed_mods as name}<div class="file-entry">{name}</div>{/each}
           </div>
         {/if}
         {#if repairResult.removed_datapacks.length > 0}
-          <p class="repair-category">Removed {repairResult.removed_datapacks.length} unauthorized datapack{repairResult.removed_datapacks.length > 1 ? 's' : ''}</p>
-          <div class="conflict-list">
-            {#each repairResult.removed_datapacks as name}
-              <div class="conflict-file">{name}</div>
-            {/each}
+          <p class="label-muted">Removed {repairResult.removed_datapacks.length} unauthorized datapack{repairResult.removed_datapacks.length > 1 ? 's' : ''}</p>
+          <div class="file-list">
+            {#each repairResult.removed_datapacks as name}<div class="file-entry">{name}</div>{/each}
           </div>
         {/if}
         {#if repairResult.restored_configs.length > 0}
-          <p class="repair-category">Restored {repairResult.restored_configs.length} config{repairResult.restored_configs.length > 1 ? 's' : ''}</p>
-          <div class="conflict-list">
-            {#each repairResult.restored_configs.slice(0, 10) as name}
-              <div class="conflict-file">{name}</div>
-            {/each}
+          <p class="label-muted">Restored {repairResult.restored_configs.length} config{repairResult.restored_configs.length > 1 ? 's' : ''}</p>
+          <div class="file-list">
+            {#each repairResult.restored_configs.slice(0, 10) as name}<div class="file-entry">{name}</div>{/each}
             {#if repairResult.restored_configs.length > 10}
-              <div class="conflict-more">+{repairResult.restored_configs.length - 10} more...</div>
+              <div class="file-more">+{repairResult.restored_configs.length - 10} more...</div>
             {/if}
           </div>
         {/if}
       {:else}
-        <h3>Pack is clean</h3>
-        <p>No issues found. All mods, datapacks, and configs match the expected pack.</p>
+        <p class="text-secondary">No issues found. All mods, datapacks, and configs match the expected pack.</p>
       {/if}
-      <div class="dialog-buttons">
-        <button class="btn-primary" onclick={() => { showRepairResult = false; repairResult = null; repairError = ""; }}>
-          OK
-        </button>
-      </div>
-    </div>
-  </div>
+    {/snippet}
+    {#snippet actions()}
+      <button class="btn btn-primary" onclick={() => { showRepairResult = false; repairResult = null; repairError = ""; }}>OK</button>
+    {/snippet}
+  </Dialog>
 {/if}
 
 <style>
@@ -408,6 +338,8 @@
     padding: 24px;
     text-align: center;
   }
+
+  /* Play section */
   .play-section {
     margin-top: 20px;
     display: flex;
@@ -422,10 +354,7 @@
     width: 100%;
     max-width: 440px;
   }
-  .progress-area {
-    flex: 1;
-    min-width: 0;
-  }
+  .progress-area { flex: 1; min-width: 0; }
   .cancel-btn {
     background: var(--bg-tertiary);
     color: var(--text-muted);
@@ -439,9 +368,11 @@
     transition: all var(--transition);
     flex-shrink: 0;
   }
-  .cancel-btn:hover {
-    background: var(--error, #e05050);
-    color: white;
+  .cancel-btn:hover { background: var(--danger); color: white; }
+  .btn-row {
+    display: flex;
+    align-items: center;
+    gap: 12px;
   }
   .play-btn {
     background: var(--success);
@@ -469,12 +400,7 @@
     background: var(--accent);
     box-shadow: 0 4px 20px var(--accent-glow);
   }
-  .btn-row {
-    display: flex;
-    align-items: center;
-    gap: 12px;
-  }
-  .folder-btn {
+  .tool-btn {
     background: var(--bg-tertiary);
     color: var(--text-secondary);
     padding: 16px;
@@ -484,50 +410,31 @@
     align-items: center;
     justify-content: center;
   }
-  .folder-btn:hover {
-    background: var(--bg-hover);
+  .tool-btn:hover:not(.disabled) {
+    background: var(--bg-card);
     color: var(--text-primary);
   }
+  .tool-btn.disabled { opacity: 0.5; cursor: default; }
 
-  .dialog-overlay {
-    position: fixed;
-    inset: 0;
-    background: rgba(0, 0, 0, 0.7);
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    z-index: 1000;
-  }
-  .dialog {
-    background: var(--bg-secondary);
-    border: 1px solid var(--border);
-    border-radius: var(--radius-lg);
-    padding: 28px;
-    max-width: 460px;
-    width: 90%;
-    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5);
-  }
-  .dialog h3 {
-    font-size: 18px;
-    font-weight: 600;
-    margin-bottom: 12px;
-    color: var(--text-primary);
-  }
-  .dialog p {
-    font-size: 14px;
-    color: var(--text-secondary);
-    margin-bottom: 16px;
-    line-height: 1.5;
-  }
-  .conflict-list {
+  /* Dialog content */
+  .text-secondary { font-size: 14px; color: var(--text-secondary); margin-bottom: 16px; line-height: 1.5; }
+  .text-muted { font-size: 13px; color: var(--text-muted); margin-bottom: 10px; line-height: 1.4; }
+  .text-error { color: var(--danger); line-height: 1.5; white-space: pre-wrap; word-break: break-word; }
+  .mono { font-family: monospace; font-size: 13px; }
+  .label-warning { font-size: 13px; font-weight: 600; color: var(--warning); margin-bottom: 4px; }
+  .label-muted { font-size: 13px; font-weight: 600; color: var(--text-secondary); margin-bottom: 6px; margin-top: 12px; }
+  .label-muted:first-of-type { margin-top: 0; }
+  .critical-section { margin-bottom: 16px; padding-bottom: 16px; border-bottom: 1px solid var(--border); }
+  .file-list {
     background: var(--bg-primary);
     border-radius: var(--radius);
     padding: 12px;
-    margin-bottom: 20px;
+    margin-bottom: 12px;
     max-height: 200px;
     overflow-y: auto;
   }
-  .conflict-file {
+  .file-list.warning { border-left: 3px solid var(--warning); }
+  .file-entry {
     font-family: monospace;
     font-size: 12px;
     color: var(--text-muted);
@@ -536,89 +443,22 @@
     overflow: hidden;
     text-overflow: ellipsis;
   }
-  .conflict-more {
-    font-size: 12px;
-    color: var(--accent);
-    padding-top: 6px;
-  }
-  .critical-section {
-    margin-bottom: 16px;
-    padding-bottom: 16px;
-    border-bottom: 1px solid var(--border);
-  }
-  .critical-label {
-    font-size: 13px;
-    font-weight: 600;
-    color: var(--warning, #f0a030);
-    margin-bottom: 4px;
-  }
-  .critical-msg {
-    font-size: 13px;
-    color: var(--text-muted);
-    margin-bottom: 10px;
-    line-height: 1.4;
-  }
-  .conflict-list.critical {
-    border-left: 3px solid var(--warning, #f0a030);
-  }
-  .repair-category {
-    font-size: 13px;
-    font-weight: 600;
-    color: var(--text-secondary);
-    margin-bottom: 6px;
-    margin-top: 12px;
-  }
-  .repair-category:first-of-type {
-    margin-top: 0;
-  }
-  .repair-error {
-    color: var(--error, #e05050);
-    font-family: monospace;
-    font-size: 13px;
-    line-height: 1.5;
-    white-space: pre-wrap;
-    word-break: break-word;
-  }
-  .dialog-buttons {
-    display: flex;
-    gap: 12px;
-    justify-content: flex-end;
-  }
-  .btn-secondary {
-    background: var(--bg-tertiary);
-    color: var(--text-secondary);
-    padding: 10px 20px;
-    border-radius: var(--radius);
-    font-size: 14px;
-    font-weight: 500;
-    transition: all var(--transition);
-  }
-  .btn-secondary:hover {
-    background: var(--bg-hover);
-    color: var(--text-primary);
-  }
-  .btn-primary {
-    background: var(--accent);
-    color: white;
+  .file-more { font-size: 12px; color: var(--accent); padding-top: 6px; }
+
+  /* Buttons */
+  .btn {
     padding: 10px 20px;
     border-radius: var(--radius);
     font-size: 14px;
     font-weight: 600;
     transition: all var(--transition);
+    border: none;
+    cursor: pointer;
   }
-  .btn-primary:hover {
-    filter: brightness(1.1);
-  }
-  .btn-danger {
-    background: var(--error, #e05050);
-    color: white;
-    padding: 10px 20px;
-    border-radius: var(--radius);
-    font-size: 14px;
-    font-weight: 600;
-    transition: all var(--transition);
-  }
-  .btn-danger:hover {
-    filter: brightness(1.1);
-  }
+  .btn-primary { background: var(--accent); color: white; }
+  .btn-primary:hover { filter: brightness(1.1); }
+  .btn-secondary { background: var(--bg-tertiary); color: var(--text-secondary); font-weight: 500; }
+  .btn-secondary:hover { background: var(--bg-card); color: var(--text-primary); }
+  .btn-danger { background: var(--danger); color: white; }
+  .btn-danger:hover { filter: brightness(1.1); }
 </style>

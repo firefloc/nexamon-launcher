@@ -5,11 +5,13 @@
   import { loadProfiles } from "./lib/stores/profiles";
   import { listen } from "@tauri-apps/api/event";
   import { launcherState, progressInfo, addLogLine } from "./lib/stores/launcher";
+  import { checkForUpdates } from "./lib/stores/updater";
   import Login from "./pages/Login.svelte";
   import Main from "./pages/Main.svelte";
   import Settings from "./pages/Settings.svelte";
   import Console from "./pages/Console.svelte";
   import Sidebar from "./components/Sidebar.svelte";
+  import UpdateBanner from "./components/UpdateBanner.svelte";
 
   let page = $state<"main" | "settings" | "console">("main");
   let loggedIn = $derived($account !== null);
@@ -30,6 +32,9 @@
     listen<{ line: string }>("game_log", (e) => {
       addLogLine(e.payload.line);
     });
+
+    // Check for updates after startup
+    checkForUpdates();
   });
 </script>
 
@@ -38,14 +43,17 @@
 {:else}
   <div class="layout">
     <Sidebar bind:page />
-    <div class="content">
-      {#if page === "main"}
-        <Main />
-      {:else if page === "settings"}
-        <Settings />
-      {:else if page === "console"}
-        <Console />
-      {/if}
+    <div class="main-area">
+      <UpdateBanner />
+      <div class="content">
+        {#if page === "main"}
+          <Main />
+        {:else if page === "settings"}
+          <Settings />
+        {:else if page === "console"}
+          <Console />
+        {/if}
+      </div>
     </div>
   </div>
 {/if}
@@ -55,6 +63,12 @@
     display: flex;
     height: 100%;
     width: 100%;
+  }
+  .main-area {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
   }
   .content {
     flex: 1;
