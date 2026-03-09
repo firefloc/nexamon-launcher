@@ -51,7 +51,8 @@
 
 <div class="login-page">
   <div class="login-card">
-    <h1 class="title">NEXAMON</h1>
+    <img src="/src/assets/nexamon-icon.png" alt="Nexamon" class="login-icon" />
+    <h1 class="title"><span class="t-teal">NEX</span><span class="t-gold">A</span><span class="t-coral">MON</span></h1>
     <p class="subtitle">Minecraft Launcher</p>
 
     {#if !deviceCode}
@@ -86,31 +87,42 @@
     align-items: center;
     justify-content: center;
     height: 100%;
-    background: var(--bg-primary);
+    background: var(--gradient-shell);
   }
   .login-card {
     text-align: center;
     padding: 48px;
-    background: var(--bg-secondary);
+    background: var(--gradient-panel);
+    border: 1px solid var(--border-subtle);
     border-radius: var(--radius-lg);
-    box-shadow: var(--shadow);
+    box-shadow: var(--shadow-deep);
     min-width: 380px;
   }
+  .login-icon {
+    width: 80px;
+    height: 80px;
+    margin-bottom: 16px;
+  }
   .title {
+    font-family: 'Oxanium', 'Trebuchet MS', sans-serif;
     font-size: 36px;
     font-weight: 700;
-    color: var(--accent);
     letter-spacing: 5px;
     margin-bottom: 4px;
   }
+  .t-teal { color: #48d2c6; }
+  .t-gold { color: #e4ba54; }
+  .t-coral { color: #e4684c; }
   .subtitle {
     color: var(--text-secondary);
     margin-bottom: 32px;
     font-size: 14px;
+    font-family: 'IBM Plex Mono', monospace;
+    letter-spacing: 0.04em;
   }
   .login-btn {
     background: var(--accent);
-    color: white;
+    color: #081824;
     padding: 12px 32px;
     border-radius: var(--radius);
     font-size: 15px;

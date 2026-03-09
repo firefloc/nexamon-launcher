@@ -29,16 +29,17 @@
   .label { color: var(--text-primary); }
   .pct { color: var(--text-secondary); }
   .progress-track {
-    height: 6px;
-    background: var(--bg-tertiary);
-    border-radius: 3px;
+    height: 8px;
+    background: rgba(255, 255, 255, 0.08);
+    border-radius: 999px;
     overflow: hidden;
   }
   .progress-fill {
     height: 100%;
-    background: var(--accent);
-    border-radius: 3px;
+    background: var(--gradient-progress);
+    border-radius: 999px;
     transition: width 0.3s ease;
+    box-shadow: 0 0 12px rgba(72, 210, 198, 0.3);
   }
   .detail {
     margin-top: 4px;

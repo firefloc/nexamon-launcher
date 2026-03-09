@@ -21,17 +21,8 @@
 
 <nav class="sidebar">
   <div class="logo">
-    <svg class="logo-icon" viewBox="0 0 32 32" width="28" height="28">
-      <defs>
-        <linearGradient id="logo-grad" x1="0%" y1="0%" x2="100%" y2="100%">
-          <stop offset="0%" style="stop-color:var(--accent-hover)" />
-          <stop offset="100%" style="stop-color:var(--accent)" />
-        </linearGradient>
-      </defs>
-      <rect width="32" height="32" rx="6" fill="url(#logo-grad)"/>
-      <text x="16" y="22" text-anchor="middle" fill="white" font-size="16" font-weight="bold" font-family="sans-serif">N</text>
-    </svg>
-    <h1>NEXAMON</h1>
+    <img src="/src/assets/nexamon-icon.png" alt="" class="logo-icon" />
+    <h1><span class="t-teal">NEX</span><span class="t-gold">A</span><span class="t-coral">MON</span></h1>
   </div>
 
   <div class="nav-items">
@@ -85,25 +76,33 @@
 <style>
   .sidebar {
     width: 200px;
-    background: var(--bg-secondary);
+    background: var(--gradient-panel);
     display: flex;
     flex-direction: column;
-    border-right: 1px solid var(--border);
+    border-right: 1px solid var(--border-subtle);
     padding: 16px 0;
   }
   .logo {
     padding: 0 20px 20px;
-    border-bottom: 1px solid var(--border);
+    border-bottom: 1px solid var(--border-subtle);
     display: flex;
     align-items: center;
     gap: 10px;
   }
+  .logo-icon {
+    width: 28px;
+    height: 28px;
+    border-radius: 4px;
+  }
   .logo h1 {
-    font-size: 18px;
+    font-family: 'Oxanium', 'Trebuchet MS', sans-serif;
+    font-size: 17px;
     font-weight: 700;
-    color: var(--accent);
     letter-spacing: 3px;
   }
+  .t-teal { color: #48d2c6; }
+  .t-gold { color: #e4ba54; }
+  .t-coral { color: #e4684c; }
   .nav-items {
     flex: 1;
     padding: 12px 8px;
@@ -126,8 +125,10 @@
     color: var(--text-primary);
   }
   .nav-btn.active {
-    background: var(--accent);
-    color: white;
+    background: rgba(72, 210, 198, 0.15);
+    color: var(--accent);
+    border-left: 3px solid var(--accent);
+    padding-left: 9px;
   }
   .nav-icon {
     width: 18px;
