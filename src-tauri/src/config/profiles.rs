@@ -64,9 +64,11 @@ impl ProfilesData {
         if path.exists() {
             if let Ok(data) = fs::read_to_string(&path) {
                 if let Ok(mut s) = serde_json::from_str::<Self>(&data) {
-                    // Migrate: old single-profile layout → 3 tiers
-                    if s.needs_migration() {
+                    if s.needs_migration_full() {
                         s = Self::default();
+                        let _ = s.save();
+                    } else {
+                        s.backfill_ram();
                         let _ = s.save();
                     }
                     return s;
@@ -79,9 +81,23 @@ impl ProfilesData {
     }
 
     /// Detect old profiles.json that only has the legacy single pack URL.
-    fn needs_migration(&self) -> bool {
+    fn needs_migration_full(&self) -> bool {
         self.profiles.len() == 1
             && self.profiles[0].pack_url.ends_with("/nexamon/pack.toml")
+    }
+
+    /// Fill in missing recommended_ram_mb based on profile id.
+    fn backfill_ram(&mut self) {
+        for p in &mut self.profiles {
+            if p.recommended_ram_mb == 0 {
+                p.recommended_ram_mb = match p.id.as_str() {
+                    "nexamon-low" => 4096,
+                    "nexamon" => 8192,
+                    "nexamon-ultra" => 16384,
+                    _ => 0,
+                };
+            }
+        }
     }
 
     pub fn save(&self) -> Result<(), String> {
@@ -107,6 +123,7 @@ impl ProfilesData {
             icon,
             description,
             last_played: None,
+            recommended_ram_mb: 0,
         };
         self.profiles.push(profile);
         if self.profiles.len() == 1 {
