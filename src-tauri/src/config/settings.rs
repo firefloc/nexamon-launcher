@@ -8,6 +8,8 @@ pub struct Settings {
     pub ram_mb: u32,
     pub java_path: Option<String>,
     pub close_on_launch: bool,
+    #[serde(default)]
+    pub auto_accept_configs: bool,
 }
 
 impl Default for Settings {
@@ -16,6 +18,7 @@ impl Default for Settings {
             ram_mb: 4096,
             java_path: None,
             close_on_launch: false,
+            auto_accept_configs: false,
         }
     }
 }

@@ -5,12 +5,14 @@ export interface Settings {
   ram_mb: number;
   java_path: string | null;
   close_on_launch: boolean;
+  auto_accept_configs: boolean;
 }
 
 const defaults: Settings = {
   ram_mb: 4096,
   java_path: null,
   close_on_launch: false,
+  auto_accept_configs: false,
 };
 
 export const settings = writable<Settings>(defaults);

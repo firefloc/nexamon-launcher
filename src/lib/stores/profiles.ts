@@ -35,8 +35,8 @@ export async function refreshPackStatuses() {
   try {
     const statuses = await invoke<Record<string, string>>("get_pack_statuses");
     packStatuses.set(statuses);
-  } catch {
-    // ignore
+  } catch (e) {
+    console.warn("refreshPackStatuses failed:", e);
   }
 }
 

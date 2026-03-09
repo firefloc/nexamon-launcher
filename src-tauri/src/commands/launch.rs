@@ -1,7 +1,8 @@
 use std::path::PathBuf;
 use tauri::AppHandle;
 
-use crate::config::{accounts::AccountStore, paths, profiles::ProfilesData, settings::Settings};
+use crate::auth::{microsoft, xbox, minecraft as mc_auth};
+use crate::config::{accounts::{Account, AccountStore}, paths, profiles::ProfilesData, settings::Settings};
 use crate::download::{client::http_client, java, libraries};
 use crate::install::{config_guard, fabric, integrity};
 use crate::launch::{arguments, classpath, process};
@@ -161,6 +162,25 @@ async fn do_launch(app: &AppHandle) -> Result<(), String> {
     let account = store.account.ok_or("Not logged in")?;
 
     let client = http_client();
+
+    // Refresh auth tokens before launch to avoid expired session
+    emit_progress(app, "Refreshing session...", "", 0.96);
+    let account = match refresh_auth_tokens(&client, &account).await {
+        Ok(refreshed) => {
+            log::info!("[launch] Auth tokens refreshed for {}", refreshed.username);
+            // Save refreshed tokens
+            let new_store = AccountStore { account: Some(refreshed.clone()) };
+            if let Err(e) = new_store.save() {
+                log::warn!("[launch] Failed to save refreshed tokens: {e}");
+            }
+            refreshed
+        }
+        Err(e) => {
+            log::warn!("[launch] Token refresh failed, using existing tokens: {e}");
+            account
+        }
+    };
+
     let instance_dir = paths::instance_dir(&profile.id);
 
     let java_path = if let Some(ref p) = settings.java_path {
@@ -172,6 +192,7 @@ async fn do_launch(app: &AppHandle) -> Result<(), String> {
     };
 
     // Integrity check: fetch remote manifest, verify mods + critical configs
+    emit_progress(app, "Verifying integrity...", "", 0.97);
     let integrity_result =
         integrity::verify_integrity(&client, &profile.pack_url, &instance_dir).await;
     if !integrity_result.is_ok() {
@@ -339,6 +360,33 @@ pub async fn repair_pack(app: AppHandle) -> Result<RepairResult, String> {
     );
 
     Ok(result)
+}
+
+/// Refresh the full auth chain: MS → Xbox → XSTS → MC token.
+async fn refresh_auth_tokens(client: &reqwest::Client, account: &Account) -> Result<Account, String> {
+    // 1. Refresh Microsoft token
+    let (ms_token, new_refresh) = microsoft::refresh_token(client, &account.refresh_token).await?;
+
+    // 2. Xbox Live
+    let (xbox_token, _uhs) = xbox::authenticate_xbox_live(client, &ms_token).await?;
+
+    // 3. XSTS
+    let (xsts_token, user_hash) = xbox::get_xsts_token(client, &xbox_token).await?;
+
+    // 4. Minecraft token
+    let mc_token = mc_auth::login_with_xbox(client, &xsts_token, &user_hash).await?;
+
+    // 5. Fetch profile to get current username
+    let profile = mc_auth::get_profile(client, &mc_token).await?;
+
+    Ok(Account {
+        username: profile.name,
+        uuid: profile.id,
+        skin_url: profile.skin_url,
+        access_token: mc_token,
+        refresh_token: new_refresh,
+        xuid: account.xuid.clone(),
+    })
 }
 
 /// Legacy command kept for compatibility.

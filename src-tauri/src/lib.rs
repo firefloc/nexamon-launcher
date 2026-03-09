@@ -45,6 +45,7 @@ pub fn run() {
             commands::profiles::open_instance_dir,
             commands::profiles::get_pack_statuses,
             commands::profiles::uninstall_pack,
+            commands::dev::is_dev_mode,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

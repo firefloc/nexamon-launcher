@@ -2,9 +2,12 @@
   import { invoke } from "@tauri-apps/api/core";
   import { profiles, selectedProfileId, selectProfile, packStatuses, refreshPackStatuses } from "../lib/stores/profiles";
   import { launcherState, progressInfo } from "../lib/stores/launcher";
+  import { settings } from "../lib/stores/settings";
   import ProfileCard from "../components/ProfileCard.svelte";
   import ProgressBar from "../components/ProgressBar.svelte";
   import Dialog from "../components/Dialog.svelte";
+  import { t } from "../lib/i18n";
+  import { debugOutlines } from "../lib/stores/dev";
 
   let isPlaying = $derived($launcherState !== "idle");
   let selectedInstalled = $derived($packStatuses[$selectedProfileId] === "installed");
@@ -16,30 +19,14 @@
   let optionalConflicts = $state<string[]>([]);
   let installOnly = $state(false);
 
+  // Install error dialog
+  let installError = $state("");
+
   // Confirm uninstall dialog
   let showConfirmUninstall = $state("");
 
-  // Repair dialog
-  let isRepairing = $state(false);
-  let showRepairResult = $state(false);
-  let repairResult = $state<{
-    removed_mods: string[];
-    removed_datapacks: string[];
-    restored_configs: string[];
-    resynced: boolean;
-  } | null>(null);
-  let repairError = $state("");
-
-  const stateLabels: Record<string, string> = {
-    idle: "Play",
-    checking_java: "Checking Java...",
-    downloading_java: "Downloading Java...",
-    downloading_minecraft: "Downloading Minecraft...",
-    installing_fabric: "Installing Fabric...",
-    syncing_mods: "Syncing mods...",
-    launching: "Launching...",
-    running: "Running",
-  };
+  let selectedProfile = $derived($profiles.find(p => p.id === $selectedProfileId) ?? null);
+  let showProgress = $derived($launcherState !== "idle" && $launcherState !== "running" && !showConfigDialog);
 
   type SyncResult = {
     status: string;
@@ -54,6 +41,10 @@
       criticalMessage = result.critical_message ?? "";
       optionalConflicts = result.optional ?? [];
       if (criticalConfigs.length > 0 || optionalConflicts.length > 0) {
+        if ($settings.auto_accept_configs) {
+          handleConfigChoice(false);
+          return true;
+        }
         showConfigDialog = true;
         installOnly = isInstallOnly;
         return true;
@@ -77,10 +68,12 @@
       if (!handleSyncResult(result, true)) {
         launcherState.set("idle");
       }
-      await refreshPackStatuses();
     } catch (e: any) {
       console.error("Install failed:", e);
+      installError = String(e);
       launcherState.set("idle");
+    } finally {
+      await refreshPackStatuses();
     }
   }
 
@@ -93,6 +86,7 @@
       }
     } catch (e: any) {
       console.error("Launch failed:", e);
+      installError = String(e);
       launcherState.set("idle");
     }
   }
@@ -125,35 +119,61 @@
     }
   }
 
-  async function handleRepair() {
-    if (isPlaying || isRepairing) return;
-    isRepairing = true;
-    repairError = "";
-    try {
-      repairResult = await invoke("repair_pack");
-      showRepairResult = true;
-    } catch (e: any) {
-      repairError = String(e);
-      showRepairResult = true;
-    } finally {
-      isRepairing = false;
-      launcherState.set("idle");
-    }
-  }
-
-  async function openInstanceFolder() {
-    try { await invoke("open_instance_dir"); } catch (e: any) { console.error(e); }
-  }
-
   function handleCancel() {
     invoke("cancel_operation");
     launcherState.set("idle");
   }
 </script>
 
-<div class="main-page">
-  <h2>Select Profile</h2>
+<div class="main-page" class:debug={$debugOutlines}>
+  <!-- Hero content area -->
+  <div class="hero-div">
+    <p class="hero-placeholder">{$t("main.hero_wip")}</p>
+  </div>
 
+  <!-- Hero row: title left, play right -->
+  <div class="hero-row">
+    <div class="selected-info">
+      {#if selectedProfile}
+        <h2 class="profile-title">{selectedProfile.name}</h2>
+        <p class="profile-desc">{selectedProfile.description}</p>
+      {:else}
+        <p class="no-selection">{$t("main.no_profiles")}</p>
+      {/if}
+    </div>
+    <button
+      class="play-btn"
+      class:disabled={isPlaying || !selectedInstalled}
+      class:running={$launcherState === "running"}
+      onclick={handlePlay}
+    >
+      {#if !selectedInstalled && $launcherState === "idle"}
+        {$t("main.not_installed")}
+      {:else if $launcherState === "idle"}
+        {$t("main.play")}
+      {:else}
+        {$t("main." + $launcherState)}
+      {/if}
+    </button>
+  </div>
+
+  <!-- Progress bar (above profile buttons, full width, always reserves space) -->
+  <div class="progress-row" class:hidden={!showProgress}>
+    <div class="progress-area">
+      <ProgressBar
+        label={$progressInfo.label}
+        detail={$progressInfo.detail}
+        progress={$progressInfo.progress}
+      />
+    </div>
+    <button class="cancel-btn" onclick={handleCancel} title="Cancel">
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+        <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
+      </svg>
+    </button>
+  </div>
+
+  <!-- Profile selector -->
   <div class="profiles">
     {#each $profiles as profile}
       <ProfileCard
@@ -165,148 +185,73 @@
         onuninstall={() => { showConfirmUninstall = profile.id; }}
       />
     {/each}
-    {#if $profiles.length === 0}
-      <p class="no-profiles">No profiles configured. Add one in Settings.</p>
-    {/if}
-  </div>
-
-  <div class="play-section">
-    {#if $launcherState !== "idle" && $launcherState !== "running" && !showConfigDialog}
-      <div class="progress-row">
-        <div class="progress-area">
-          <ProgressBar
-            label={$progressInfo.label}
-            detail={$progressInfo.detail}
-            progress={$progressInfo.progress}
-          />
-        </div>
-        <button class="cancel-btn" onclick={handleCancel} title="Cancel">
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
-            <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
-          </svg>
-        </button>
-      </div>
-    {/if}
-
-    <div class="btn-row">
-      <button
-        class="play-btn"
-        class:disabled={isPlaying || !selectedInstalled}
-        class:running={$launcherState === "running"}
-        onclick={handlePlay}
-      >
-        {#if !selectedInstalled && $launcherState === "idle"}
-          Not installed
-        {:else}
-          {stateLabels[$launcherState] || "Play"}
-        {/if}
-      </button>
-      <button class="tool-btn" class:disabled={isRepairing} onclick={handleRepair} title="Verify & repair">
-        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-          <path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"/>
-        </svg>
-      </button>
-      <button class="tool-btn" onclick={openInstanceFolder} title="Open folder">
-        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-          <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/>
-        </svg>
-      </button>
-    </div>
   </div>
 </div>
 
 <!-- Config conflict dialog -->
 {#if showConfigDialog}
-  <Dialog title="Configuration update">
+  <Dialog title={$t("dialog.config_update")}>
     {#snippet children()}
       {#if criticalConfigs.length > 0}
         <div class="critical-section">
-          <p class="label-warning">Required updates applied</p>
-          <p class="text-muted">{criticalMessage || "Some configs were force-updated for compatibility."}</p>
+          <p class="label-warning">{$t("dialog.required_updates")}</p>
+          <p class="text-muted">{criticalMessage || $t("dialog.force_updated")}</p>
           <div class="file-list warning">
             {#each criticalConfigs.slice(0, 5) as file}
               <div class="file-entry">{file}</div>
             {/each}
             {#if criticalConfigs.length > 5}
-              <div class="file-more">+{criticalConfigs.length - 5} more...</div>
+              <div class="file-more">{$t("dialog.more", { n: criticalConfigs.length - 5 })}</div>
             {/if}
           </div>
         </div>
       {/if}
       {#if optionalConflicts.length > 0}
         <p class="text-secondary">
-          {optionalConflicts.length} config file{optionalConflicts.length > 1 ? 's' : ''} you
-          customized {optionalConflicts.length > 1 ? 'have' : 'has'} also been updated.
+          {optionalConflicts.length > 1 ? $t("dialog.optional_plural", { n: optionalConflicts.length }) : $t("dialog.optional_single")}
         </p>
         <div class="file-list">
           {#each optionalConflicts.slice(0, 8) as file}
             <div class="file-entry">{file}</div>
           {/each}
           {#if optionalConflicts.length > 8}
-            <div class="file-more">+{optionalConflicts.length - 8} more...</div>
+            <div class="file-more">{$t("dialog.more", { n: optionalConflicts.length - 8 })}</div>
           {/if}
         </div>
       {/if}
     {/snippet}
     {#snippet actions()}
       {#if optionalConflicts.length > 0}
-        <button class="btn btn-secondary" onclick={() => handleConfigChoice(true)}>Keep my settings</button>
-        <button class="btn btn-primary" onclick={() => handleConfigChoice(false)}>Use pack defaults</button>
+        <button class="btn btn-secondary" onclick={() => handleConfigChoice(true)}>{$t("dialog.keep_settings")}</button>
+        <button class="btn btn-primary" onclick={() => handleConfigChoice(false)}>{$t("dialog.use_defaults")}</button>
       {:else}
-        <button class="btn btn-primary" onclick={() => handleConfigChoice(false)}>OK</button>
+        <button class="btn btn-primary" onclick={() => handleConfigChoice(false)}>{$t("dialog.ok")}</button>
       {/if}
+    {/snippet}
+  </Dialog>
+{/if}
+
+<!-- Install/launch error -->
+{#if installError}
+  <Dialog title={$t("dialog.error")}>
+    {#snippet children()}
+      <p class="text-error mono">{installError}</p>
+    {/snippet}
+    {#snippet actions()}
+      <button class="btn btn-primary" onclick={() => { installError = ""; }}>OK</button>
     {/snippet}
   </Dialog>
 {/if}
 
 <!-- Uninstall confirmation -->
 {#if showConfirmUninstall}
-  <Dialog title="Uninstall pack">
+  <Dialog title={$t("dialog.uninstall")}>
     {#snippet children()}
-      <p class="text-secondary">This will delete all downloaded files for this profile. You can reinstall it later.</p>
+      <p class="text-secondary">{$t("dialog.uninstall_confirm")}</p>
     {/snippet}
     {#snippet actions()}
-      <button class="btn btn-secondary" onclick={() => { showConfirmUninstall = ""; }}>Cancel</button>
-      <button class="btn btn-danger" onclick={confirmUninstall}>Uninstall</button>
-    {/snippet}
-  </Dialog>
-{/if}
-
-<!-- Repair result -->
-{#if showRepairResult}
-  {@const hasChanges = repairResult && (repairResult.removed_mods.length > 0 || repairResult.removed_datapacks.length > 0 || repairResult.restored_configs.length > 0)}
-  <Dialog title={repairError ? "Repair failed" : hasChanges ? "Pack repaired" : "Pack is clean"}>
-    {#snippet children()}
-      {#if repairError}
-        <p class="text-error mono">{repairError}</p>
-      {:else if hasChanges && repairResult}
-        {#if repairResult.removed_mods.length > 0}
-          <p class="label-muted">Removed {repairResult.removed_mods.length} unauthorized mod{repairResult.removed_mods.length > 1 ? 's' : ''}</p>
-          <div class="file-list">
-            {#each repairResult.removed_mods as name}<div class="file-entry">{name}</div>{/each}
-          </div>
-        {/if}
-        {#if repairResult.removed_datapacks.length > 0}
-          <p class="label-muted">Removed {repairResult.removed_datapacks.length} unauthorized datapack{repairResult.removed_datapacks.length > 1 ? 's' : ''}</p>
-          <div class="file-list">
-            {#each repairResult.removed_datapacks as name}<div class="file-entry">{name}</div>{/each}
-          </div>
-        {/if}
-        {#if repairResult.restored_configs.length > 0}
-          <p class="label-muted">Restored {repairResult.restored_configs.length} config{repairResult.restored_configs.length > 1 ? 's' : ''}</p>
-          <div class="file-list">
-            {#each repairResult.restored_configs.slice(0, 10) as name}<div class="file-entry">{name}</div>{/each}
-            {#if repairResult.restored_configs.length > 10}
-              <div class="file-more">+{repairResult.restored_configs.length - 10} more...</div>
-            {/if}
-          </div>
-        {/if}
-      {:else}
-        <p class="text-secondary">No issues found. All mods, datapacks, and configs match the expected pack.</p>
-      {/if}
-    {/snippet}
-    {#snippet actions()}
-      <button class="btn btn-primary" onclick={() => { showRepairResult = false; repairResult = null; repairError = ""; }}>OK</button>
+      <button class="btn btn-secondary" onclick={() => { showConfirmUninstall = ""; }}>{$t("dialog.cancel")}</button>
+      <button class="btn btn-danger" onclick={confirmUninstall}>{$t("dialog.uninstall_btn")}</button>
     {/snippet}
   </Dialog>
 {/if}
@@ -317,43 +262,65 @@
     flex-direction: column;
     height: 100%;
   }
-  h2 {
-    font-size: 16px;
-    font-weight: 600;
-    margin-bottom: 16px;
-    color: var(--text-secondary);
-    text-transform: uppercase;
-    letter-spacing: 1px;
-  }
-  .profiles {
-    display: flex;
-    flex-direction: column;
-    gap: 10px;
+
+  /* Hero content area */
+  .hero-div {
     flex: 1;
-    overflow-y: auto;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 0;
   }
-  .no-profiles {
+  .hero-placeholder {
     color: var(--text-muted);
     font-size: 14px;
-    padding: 24px;
     text-align: center;
+    max-width: 300px;
+    line-height: 1.5;
   }
 
-  /* Play section */
-  .play-section {
-    margin-top: 20px;
+  /* Hero row: title left, play right */
+  .hero-row {
     display: flex;
-    flex-direction: column;
     align-items: center;
-    gap: 16px;
+    justify-content: space-between;
+    gap: 24px;
+    padding: 16px 0;
+  }
+  .selected-info {
+    text-align: left;
+    min-width: 0;
+  }
+  .profile-title {
+    font-size: 22px;
+    font-weight: 700;
+    color: var(--text-primary);
+    margin-bottom: 4px;
+  }
+  .profile-desc {
+    font-size: 13px;
+    color: var(--text-secondary);
+  }
+  .no-selection {
+    color: var(--text-muted);
+    font-size: 14px;
+  }
+
+  /* Profile selector (bottom) */
+  .profiles {
+    display: flex;
+    flex-direction: row;
+    gap: 8px;
+    padding-top: 16px;
+    border-top: 1px solid var(--border-subtle);
   }
   .progress-row {
     display: flex;
     align-items: center;
     gap: 8px;
     width: 100%;
-    max-width: 440px;
   }
+  .progress-row.hidden { visibility: hidden; }
   .progress-area { flex: 1; min-width: 0; }
   .cancel-btn {
     background: var(--bg-tertiary);
@@ -369,11 +336,6 @@
     flex-shrink: 0;
   }
   .cancel-btn:hover { background: var(--danger); color: white; }
-  .btn-row {
-    display: flex;
-    align-items: center;
-    gap: 12px;
-  }
   .play-btn {
     background: var(--success);
     color: white;
@@ -400,22 +362,6 @@
     background: var(--accent);
     box-shadow: 0 4px 20px var(--accent-glow);
   }
-  .tool-btn {
-    background: var(--bg-tertiary);
-    color: var(--text-secondary);
-    padding: 16px;
-    border-radius: var(--radius-lg);
-    transition: all var(--transition);
-    display: flex;
-    align-items: center;
-    justify-content: center;
-  }
-  .tool-btn:hover:not(.disabled) {
-    background: var(--bg-card);
-    color: var(--text-primary);
-  }
-  .tool-btn.disabled { opacity: 0.5; cursor: default; }
-
   /* Dialog content */
   .text-secondary { font-size: 14px; color: var(--text-secondary); margin-bottom: 16px; line-height: 1.5; }
   .text-muted { font-size: 13px; color: var(--text-muted); margin-bottom: 10px; line-height: 1.4; }
@@ -461,4 +407,12 @@
   .btn-secondary:hover { background: var(--bg-card); color: var(--text-primary); }
   .btn-danger { background: var(--danger); color: white; }
   .btn-danger:hover { filter: brightness(1.1); }
+
+  /* Debug outlines (toggled from Dev page) */
+  .main-page.debug { outline: 2px dashed red; }
+  .main-page.debug .hero-row { outline: 2px dashed lime; }
+  .main-page.debug .selected-info { outline: 2px dashed cyan; }
+  .main-page.debug .play-btn { outline: 2px dashed orange; }
+  .main-page.debug .hero-div { outline: 2px dashed yellow; }
+  .main-page.debug .profiles { outline: 2px dashed magenta; }
 </style>

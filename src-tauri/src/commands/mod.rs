@@ -1,4 +1,5 @@
 pub mod auth;
+pub mod dev;
 pub mod java;
 pub mod minecraft;
 pub mod fabric;

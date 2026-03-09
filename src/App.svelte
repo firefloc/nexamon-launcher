@@ -6,20 +6,23 @@
   import { listen } from "@tauri-apps/api/event";
   import { launcherState, progressInfo, addLogLine } from "./lib/stores/launcher";
   import { checkForUpdates } from "./lib/stores/updater";
+  import { devMode, checkDevMode } from "./lib/stores/dev";
   import Login from "./pages/Login.svelte";
   import Main from "./pages/Main.svelte";
   import Settings from "./pages/Settings.svelte";
   import Console from "./pages/Console.svelte";
+  import Dev from "./pages/Dev.svelte";
   import Sidebar from "./components/Sidebar.svelte";
   import UpdateBanner from "./components/UpdateBanner.svelte";
 
-  let page = $state<"main" | "settings" | "console">("main");
+  let page = $state<"main" | "settings" | "console" | "dev">("main");
   let loggedIn = $derived($account !== null);
 
   onMount(async () => {
     await loadSettings();
     await loadProfiles();
     await checkSavedAccount();
+    await checkDevMode();
 
     listen<{ label: string; detail: string; progress: number }>("progress", (e) => {
       progressInfo.set(e.payload);
@@ -42,7 +45,7 @@
   <Login />
 {:else}
   <div class="layout">
-    <Sidebar bind:page />
+    <Sidebar bind:page devMode={$devMode} />
     <div class="main-area">
       <UpdateBanner />
       <div class="content">
@@ -52,6 +55,8 @@
           <Settings />
         {:else if page === "console"}
           <Console />
+        {:else if page === "dev"}
+          <Dev />
         {/if}
       </div>
     </div>

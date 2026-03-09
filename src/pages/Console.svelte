@@ -1,5 +1,6 @@
 <script lang="ts">
   import { gameLog, clearLog } from "../lib/stores/launcher";
+  import { t } from "../lib/i18n";
 
   let logContainer: HTMLDivElement;
   let autoScroll = $state(true);
@@ -20,13 +21,13 @@
 
 <div class="console-page">
   <div class="console-header">
-    <h2>Console</h2>
+    <h2>{$t("console.title")}</h2>
     <div class="controls">
       <label class="auto-scroll">
         <input type="checkbox" bind:checked={autoScroll} />
-        <span>Auto-scroll</span>
+        <span>{$t("console.auto_scroll")}</span>
       </label>
-      <button class="clear-btn" onclick={() => clearLog()}>Clear</button>
+      <button class="clear-btn" onclick={() => clearLog()}>{$t("console.clear")}</button>
     </div>
   </div>
 
@@ -35,7 +36,7 @@
       <div class="log-line {getLineClass(line)}">{line}</div>
     {/each}
     {#if $gameLog.length === 0}
-      <div class="empty">No log output yet. Launch the game to see logs.</div>
+      <div class="empty">{$t("console.empty")}</div>
     {/if}
   </div>
 </div>

@@ -265,8 +265,9 @@ pub async fn sync_mods(
     }
 
     // Wait for process with timeout + cancellation support
-    info!("[packwiz] Waiting for process to finish (timeout: 300s)...");
-    let timeout = std::time::Duration::from_secs(300);
+    // 15 min timeout: fresh installs download ~300 mods + RPs, needs time
+    info!("[packwiz] Waiting for process to finish (timeout: 900s)...");
+    let timeout = std::time::Duration::from_secs(900);
     let kill_rx = crate::util::cancel::kill_channel();
 
     let status = tokio::select! {
@@ -284,10 +285,10 @@ pub async fn sync_mods(
             return Err("Operation cancelled".into());
         }
         _ = tokio::time::sleep(timeout) => {
-            error!("[packwiz] TIMEOUT after 300s — killing process");
-            emit_log(app, "[packwiz] TIMEOUT after 300s — killing process");
+            error!("[packwiz] TIMEOUT after 900s — killing process");
+            emit_log(app, "[packwiz] TIMEOUT after 900s — killing process");
             let _ = child.kill().await;
-            return Err("packwiz-installer timed out after 5 minutes".into());
+            return Err("packwiz-installer timed out after 15 minutes".into());
         }
     };
 

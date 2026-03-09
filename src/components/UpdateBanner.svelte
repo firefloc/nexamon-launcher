@@ -1,5 +1,6 @@
 <script lang="ts">
   import { updateAvailable, updateProgress, installUpdate, dismissUpdate } from "../lib/stores/updater";
+  import { t } from "../lib/i18n";
 
   let installing = $derived($updateProgress !== "");
 </script>
@@ -14,13 +15,13 @@
         {#if installing}
           {$updateProgress}
         {:else}
-          Update <strong>v{$updateAvailable.version}</strong> available
+          {$t("update.available", { version: $updateAvailable.version })}
         {/if}
       </span>
     </div>
     <div class="update-actions">
       {#if !installing}
-        <button class="update-btn" onclick={installUpdate}>Update now</button>
+        <button class="update-btn" onclick={installUpdate}>{$t("update.now")}</button>
         <button class="dismiss-btn" onclick={dismissUpdate} title="Dismiss">
           <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
             <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>

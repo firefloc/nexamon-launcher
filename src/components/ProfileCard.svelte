@@ -1,5 +1,6 @@
 <script lang="ts">
   import type { Profile } from "../lib/stores/profiles";
+  import { t } from "../lib/i18n";
 
   let { profile, selected = false, installed = false, onselect, oninstall, onuninstall }: {
     profile: Profile;
@@ -32,57 +33,49 @@
       </svg>
     {/if}
   </div>
-  <div class="card-info">
-    <div class="card-name">{profile.name}</div>
-    <div class="card-desc">{profile.description}</div>
-  </div>
-  <div class="card-actions">
+  <div class="card-body">
+    <div class="card-top">
+      <span class="card-name">{profile.name}</span>
+      {#if installed}
+        <span class="status">{$t("profile.installed")}</span>
+      {/if}
+    </div>
     {#if installed}
-      <span class="status installed">Installed</span>
       <button
         class="action-btn uninstall"
-        title="Uninstall pack"
         onclick={(e: MouseEvent) => { e.stopPropagation(); onuninstall(); }}
       >
-        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
           <polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/>
         </svg>
+        {$t("profile.uninstall")}
       </button>
     {:else}
       <button
         class="action-btn install"
-        title="Install pack"
         onclick={(e: MouseEvent) => { e.stopPropagation(); oninstall(); }}
       >
-        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
           <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/>
         </svg>
-        Install
+        {$t("profile.install")}
       </button>
     {/if}
   </div>
-  {#if selected}
-    <div class="selected-badge">
-      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round">
-        <polyline points="20 6 9 17 4 12"/>
-      </svg>
-    </div>
-  {/if}
 </div>
 
 <style>
   .card {
     display: flex;
     align-items: center;
-    gap: 12px;
-    padding: 14px 16px;
+    gap: 10px;
+    padding: 8px 12px;
     background: var(--bg-card);
     border: 2px solid var(--border);
-    border-radius: var(--radius-lg);
-    text-align: left;
+    border-radius: var(--radius);
     transition: all var(--transition);
-    position: relative;
-    width: 100%;
+    flex: 1;
+    min-width: 0;
     cursor: pointer;
   }
   .card:hover {
@@ -91,86 +84,63 @@
   }
   .card.selected {
     border-color: var(--accent);
-    box-shadow: 0 0 12px var(--accent-glow);
+    box-shadow: 0 0 10px var(--accent-glow);
   }
   .card-icon {
-    width: 36px;
-    height: 36px;
+    width: 24px;
+    height: 24px;
     flex-shrink: 0;
   }
   .card-icon :global(svg) {
     width: 100%;
     height: 100%;
   }
-  .card-info {
+  .card-body {
     flex: 1;
     min-width: 0;
   }
+  .card-top {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
   .card-name {
     font-weight: 600;
-    font-size: 14px;
-    margin-bottom: 2px;
-  }
-  .card-desc {
-    font-size: 12px;
-    color: var(--text-secondary);
+    font-size: 13px;
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
   }
-  .card-actions {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    margin-right: 8px;
-  }
   .status {
-    font-size: 11px;
+    font-size: 10px;
     font-weight: 600;
     text-transform: uppercase;
     letter-spacing: 0.5px;
-  }
-  .status.installed {
     color: var(--success);
+    flex-shrink: 0;
   }
   .action-btn {
     display: flex;
     align-items: center;
     gap: 4px;
-    padding: 6px 10px;
-    border-radius: var(--radius);
-    font-size: 12px;
-    font-weight: 600;
+    padding: 2px 0;
+    font-size: 11px;
     transition: all var(--transition);
     background: none;
     border: none;
     cursor: pointer;
+    color: var(--text-muted);
+  }
+  .action-btn:hover {
+    color: var(--text-primary);
   }
   .action-btn.install {
-    background: var(--accent);
-    color: white;
-    padding: 6px 12px;
+    color: var(--accent);
   }
   .action-btn.install:hover {
     filter: brightness(1.15);
   }
-  .action-btn.uninstall {
-    color: var(--text-muted);
-    padding: 6px;
-  }
   .action-btn.uninstall:hover {
     color: var(--danger);
-    background: rgba(224, 80, 80, 0.1);
-  }
-  .selected-badge {
-    width: 24px;
-    height: 24px;
-    border-radius: 50%;
-    background: var(--accent);
-    color: white;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    flex-shrink: 0;
   }
 </style>

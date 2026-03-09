@@ -1,5 +1,6 @@
-import { writable } from "svelte/store";
+import { writable, get } from "svelte/store";
 import { check } from "@tauri-apps/plugin-updater";
+import { t } from "../i18n";
 
 export interface UpdateInfo {
   version: string;
@@ -29,14 +30,12 @@ export async function checkForUpdates() {
 export async function installUpdate() {
   if (!updateRef) return;
   try {
-    updateProgress.set("Downloading...");
+    updateProgress.set(get(t)("update.downloading"));
     await updateRef.downloadAndInstall((event) => {
-      if (event.event === "Started" && event.data.contentLength) {
-        updateProgress.set(`Downloading (${Math.round(event.data.contentLength / 1024 / 1024)}MB)...`);
-      } else if (event.event === "Progress") {
-        updateProgress.set(`Downloading...`);
+      if (event.event === "Started" || event.event === "Progress") {
+        updateProgress.set(get(t)("update.downloading"));
       } else if (event.event === "Finished") {
-        updateProgress.set("Restarting...");
+        updateProgress.set(get(t)("update.restarting"));
       }
     });
     // Tauri will auto-restart after install

@@ -1,6 +1,7 @@
 <script lang="ts">
   import { startLogin, pollLogin, type DeviceCode } from "../lib/stores/auth";
   import { open } from "@tauri-apps/plugin-shell";
+  import { t } from "../lib/i18n";
 
   let deviceCode = $state<DeviceCode | null>(null);
   let error = $state("");
@@ -53,24 +54,24 @@
   <div class="login-card">
     <img src="/src/assets/nexamon-icon.png" alt="Nexamon" class="login-icon" />
     <h1 class="title"><span class="t-teal">NEX</span><span class="t-gold">A</span><span class="t-coral">MON</span></h1>
-    <p class="subtitle">Minecraft Launcher</p>
+    <p class="subtitle">{$t("login.subtitle")}</p>
 
     {#if !deviceCode}
       <button class="login-btn" onclick={handleLogin}>
-        Sign in with Microsoft
+        {$t("login.button")}
       </button>
     {:else}
       <div class="device-code">
-        <p>A browser window has opened. Enter this code:</p>
-        <button class="code" onclick={copyCode} title="Click to copy">
+        <p>{$t("login.browser_opened")}</p>
+        <button class="code" onclick={copyCode} title={$t("login.copy_hint")}>
           {deviceCode.user_code}
         </button>
-        <p class="copy-hint">{copied ? "Copied!" : "Click code to copy"}</p>
+        <p class="copy-hint">{copied ? $t("login.copied") : $t("login.copy_hint")}</p>
         <button class="open-link" onclick={openLink}>
-          Open login page again
+          {$t("login.open_again")}
         </button>
         {#if polling}
-          <p class="waiting">Waiting for authentication...</p>
+          <p class="waiting">{$t("login.waiting")}</p>
         {/if}
       </div>
     {/if}
