@@ -42,7 +42,7 @@ impl Default for ProfilesData {
                     icon: "high".into(),
                     description: "Pack recommande avec shaders et mods visuels".into(),
                     last_played: None,
-                    recommended_ram_mb: 6144,
+                    recommended_ram_mb: 8192,
                 },
                 Profile {
                     id: "nexamon-ultra".into(),
@@ -51,7 +51,7 @@ impl Default for ProfilesData {
                     icon: "ultra".into(),
                     description: "Tous les mods et shaders, pour configs puissantes".into(),
                     last_played: None,
-                    recommended_ram_mb: 8192,
+                    recommended_ram_mb: 16384,
                 },
             ],
         }
