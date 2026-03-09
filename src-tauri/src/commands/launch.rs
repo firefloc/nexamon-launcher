@@ -152,7 +152,7 @@ async fn do_launch(app: &AppHandle) -> Result<(), String> {
     let integrity_result =
         integrity::verify_integrity(&client, &profile.pack_url, &instance_dir).await;
     if !integrity_result.is_ok() {
-        return Err(integrity_result.format_error());
+        log::warn!("[launch] Integrity issues detected (non-blocking):\n{}", integrity_result.format_error());
     }
 
     emit_state(app, "launching");
