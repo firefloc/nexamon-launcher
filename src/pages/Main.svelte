@@ -2,7 +2,7 @@
   import { invoke } from "@tauri-apps/api/core";
   import { profiles, selectedProfileId, selectProfile, packStatuses, refreshPackStatuses } from "../lib/stores/profiles";
   import { launcherState, progressInfo } from "../lib/stores/launcher";
-  import { settings } from "../lib/stores/settings";
+  import { settings, saveSettings } from "../lib/stores/settings";
   import ProfileCard from "../components/ProfileCard.svelte";
   import ProgressBar from "../components/ProgressBar.svelte";
   import Dialog from "../components/Dialog.svelte";
@@ -10,10 +10,19 @@
   import { debugOutlines } from "../lib/stores/dev";
 
   let systemRamMb = $state(16384);
-  invoke<number>("get_system_ram_mb").then((ram) => { systemRamMb = ram; });
+  invoke<number>("get_system_ram_mb").then((ram) => {
+    systemRamMb = ram;
+    // Auto-set RAM for current profile on startup
+    applyRamForProfile($selectedProfileId);
+  });
 
   let isPlaying = $derived($launcherState !== "idle");
   let selectedInstalled = $derived($packStatuses[$selectedProfileId] === "installed");
+
+  // RAM warning dialog
+  let showRamWarning = $state(false);
+  let ramWarningDismiss = $state(false);
+  let pendingAction = $state<(() => Promise<void>) | null>(null);
 
   // Config conflict dialog
   let showConfigDialog = $state(false);
@@ -63,35 +72,86 @@
     optionalConflicts = [];
   }
 
-  async function handleInstall(profileId: string) {
+  /** Set RAM to profile recommended, or system max if insufficient */
+  async function applyRamForProfile(profileId: string) {
+    const profile = $profiles.find(p => p.id === profileId);
+    if (!profile || profile.recommended_ram_mb === 0) return;
+    const maxRam = Math.floor(systemRamMb / 512) * 512;
+    const targetRam = Math.min(profile.recommended_ram_mb, maxRam);
+    if ($settings.ram_mb !== targetRam) {
+      await saveSettings({ ...$settings, ram_mb: targetRam });
+    }
+  }
+
+  async function handleSelectProfile(profileId: string) {
     if (isPlaying) return;
     await selectProfile(profileId);
-    try {
-      const result = await invoke<SyncResult>("prepare_and_sync");
-      if (!handleSyncResult(result, true)) {
-        launcherState.set("idle");
-      }
-    } catch (e: any) {
-      console.error("Install failed:", e);
-      installError = String(e);
-      launcherState.set("idle");
-    } finally {
-      await refreshPackStatuses();
+    await applyRamForProfile(profileId);
+  }
+
+  /** Check RAM before action, show warning if insufficient */
+  function checkRamAndProceed(action: () => Promise<void>) {
+    if (!selectedProfile || selectedProfile.recommended_ram_mb === 0) {
+      action();
+      return;
     }
+    if (systemRamMb < selectedProfile.recommended_ram_mb && !$settings.dismiss_ram_warning) {
+      pendingAction = action;
+      ramWarningDismiss = false;
+      showRamWarning = true;
+    } else {
+      action();
+    }
+  }
+
+  async function handleRamWarningContinue() {
+    if (ramWarningDismiss) {
+      await saveSettings({ ...$settings, dismiss_ram_warning: true });
+    }
+    showRamWarning = false;
+    const action = pendingAction;
+    pendingAction = null;
+    if (action) await action();
+  }
+
+  function handleRamWarningCancel() {
+    showRamWarning = false;
+    pendingAction = null;
+  }
+
+  async function handleInstall(profileId: string) {
+    if (isPlaying) return;
+    await handleSelectProfile(profileId);
+    checkRamAndProceed(async () => {
+      try {
+        const result = await invoke<SyncResult>("prepare_and_sync");
+        if (!handleSyncResult(result, true)) {
+          launcherState.set("idle");
+        }
+      } catch (e: any) {
+        console.error("Install failed:", e);
+        installError = String(e);
+        launcherState.set("idle");
+      } finally {
+        await refreshPackStatuses();
+      }
+    });
   }
 
   async function handlePlay() {
     if (isPlaying || !selectedInstalled) return;
-    try {
-      const result = await invoke<SyncResult>("prepare_and_sync");
-      if (!handleSyncResult(result, false)) {
-        await invoke("launch_after_sync");
+    checkRamAndProceed(async () => {
+      try {
+        const result = await invoke<SyncResult>("prepare_and_sync");
+        if (!handleSyncResult(result, false)) {
+          await invoke("launch_after_sync");
+        }
+      } catch (e: any) {
+        console.error("Launch failed:", e);
+        installError = String(e);
+        launcherState.set("idle");
       }
-    } catch (e: any) {
-      console.error("Launch failed:", e);
-      installError = String(e);
-      launcherState.set("idle");
-    }
+    });
   }
 
   async function handleConfigChoice(keepUserConfigs: boolean) {
@@ -184,7 +244,7 @@
         selected={profile.id === $selectedProfileId}
         installed={$packStatuses[profile.id] === "installed"}
         {systemRamMb}
-        onselect={() => { if (!isPlaying) selectProfile(profile.id); }}
+        onselect={() => handleSelectProfile(profile.id)}
         oninstall={() => handleInstall(profile.id)}
         onuninstall={() => { showConfirmUninstall = profile.id; }}
       />
@@ -243,6 +303,23 @@
     {/snippet}
     {#snippet actions()}
       <button class="btn btn-primary" onclick={() => { installError = ""; }}>OK</button>
+    {/snippet}
+  </Dialog>
+{/if}
+
+<!-- RAM warning -->
+{#if showRamWarning && selectedProfile}
+  <Dialog title={$t("dialog.ram_warning")}>
+    {#snippet children()}
+      <p class="text-secondary">{$t("dialog.ram_warning_text", { recommended: (selectedProfile.recommended_ram_mb / 1024).toFixed(0), available: (systemRamMb / 1024).toFixed(0) })}</p>
+      <label class="dismiss-check">
+        <input type="checkbox" bind:checked={ramWarningDismiss} />
+        <span>{$t("dialog.ram_dismiss")}</span>
+      </label>
+    {/snippet}
+    {#snippet actions()}
+      <button class="btn btn-secondary" onclick={handleRamWarningCancel}>{$t("dialog.cancel")}</button>
+      <button class="btn btn-primary" onclick={handleRamWarningContinue}>{$t("dialog.ram_continue")}</button>
     {/snippet}
   </Dialog>
 {/if}
@@ -411,6 +488,21 @@
   .btn-secondary:hover { background: var(--bg-card); color: var(--text-primary); }
   .btn-danger { background: var(--danger); color: white; }
   .btn-danger:hover { filter: brightness(1.1); }
+
+  .dismiss-check {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 13px;
+    color: var(--text-muted);
+    cursor: pointer;
+    margin-top: 8px;
+  }
+  .dismiss-check input {
+    width: 14px;
+    height: 14px;
+    accent-color: var(--accent);
+  }
 
   /* Debug outlines (toggled from Dev page) */
   .main-page.debug { outline: 2px dashed red; }

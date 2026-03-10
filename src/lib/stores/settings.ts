@@ -6,6 +6,7 @@ export interface Settings {
   java_path: string | null;
   close_on_launch: boolean;
   auto_accept_configs: boolean;
+  dismiss_ram_warning: boolean;
 }
 
 const defaults: Settings = {
@@ -13,6 +14,7 @@ const defaults: Settings = {
   java_path: null,
   close_on_launch: false,
   auto_accept_configs: false,
+  dismiss_ram_warning: false,
 };
 
 export const settings = writable<Settings>(defaults);

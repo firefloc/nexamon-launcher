@@ -85,6 +85,12 @@ const translations: Record<Locale, Record<string, string>> = {
     "profile.ram_recommended": "RAM recommandee",
     "profile.ram_insufficient": "RAM insuffisante pour ce pack",
 
+    // RAM warning dialog
+    "dialog.ram_warning": "RAM insuffisante",
+    "dialog.ram_warning_text": "Votre systeme ne dispose pas de suffisamment de RAM pour ce profil ({recommended} GB recommandes, {available} GB disponibles). Le lanceur allouera le maximum de memoire disponible au jeu.",
+    "dialog.ram_continue": "Continuer",
+    "dialog.ram_dismiss": "Ne plus afficher cette alerte",
+
     // Maintenance
     "nav.maintenance": "Maintenance",
     "maintenance.configs": "Configuration",
@@ -188,6 +194,11 @@ const translations: Record<Locale, Record<string, string>> = {
     "profile.uninstall": "Uninstall",
     "profile.ram_recommended": "Recommended RAM",
     "profile.ram_insufficient": "Insufficient RAM for this pack",
+
+    "dialog.ram_warning": "Insufficient RAM",
+    "dialog.ram_warning_text": "Your system does not have enough RAM for this profile ({recommended} GB recommended, {available} GB available). The launcher will allocate the maximum available memory.",
+    "dialog.ram_continue": "Continue",
+    "dialog.ram_dismiss": "Don't show this warning again",
 
     "nav.maintenance": "Maintenance",
     "maintenance.configs": "Configuration",

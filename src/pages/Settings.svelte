@@ -8,12 +8,17 @@
   let maxRamMb = $state(16384);
 
   $effect(() => {
-    local = { ...$settings };
+    const s = $settings;
+    // Re-apply after maxRamMb is known to ensure slider position is correct
+    local = { ...s, ram_mb: Math.min(s.ram_mb, maxRamMb || s.ram_mb) };
   });
 
   $effect(() => {
     invoke<number>("get_system_ram_mb").then((ram) => {
-      maxRamMb = Math.floor(ram / 512) * 512;
+      const max = Math.floor(ram / 512) * 512;
+      maxRamMb = max;
+      // Force re-clamp local value to update slider position
+      local = { ...$settings, ram_mb: Math.min($settings.ram_mb, max) };
     });
   });
 

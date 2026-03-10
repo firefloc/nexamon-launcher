@@ -10,6 +10,8 @@ pub struct Settings {
     pub close_on_launch: bool,
     #[serde(default)]
     pub auto_accept_configs: bool,
+    #[serde(default)]
+    pub dismiss_ram_warning: bool,
 }
 
 impl Default for Settings {
@@ -19,6 +21,7 @@ impl Default for Settings {
             java_path: None,
             close_on_launch: false,
             auto_accept_configs: false,
+            dismiss_ram_warning: false,
         }
     }
 }
