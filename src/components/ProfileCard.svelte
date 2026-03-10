@@ -13,7 +13,7 @@
   } = $props();
 
   let ramInsufficient = $derived(profile.recommended_ram_mb > 0 && systemRamMb < profile.recommended_ram_mb);
-  let ramLabel = $derived(profile.recommended_ram_mb > 0 ? `${(profile.recommended_ram_mb / 1024).toFixed(0)} GB` : "");
+  let ramLabel = $derived(profile.recommended_ram_mb > 0 ? `${(profile.recommended_ram_mb / 1024).toFixed(0)} GB RAM` : "");
 </script>
 
 <!-- svelte-ignore a11y_no_static_element_interactions -->

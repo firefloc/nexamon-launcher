@@ -10,6 +10,14 @@ use commands::auth::AuthState;
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
+    // Fix white screen on Linux with certain GPU/EGL configurations
+    #[cfg(target_os = "linux")]
+    {
+        if std::env::var("WEBKIT_DISABLE_DMABUF_RENDERER").is_err() {
+            std::env::set_var("WEBKIT_DISABLE_DMABUF_RENDERER", "1");
+        }
+    }
+
     let _ = config::paths::ensure_dirs();
 
     tauri::Builder::default()
